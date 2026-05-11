@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>EscolaPro — Sistema de Gestão</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            primary: { 50:'#eef2ff',100:'#e0e7ff',200:'#c7d2fe',300:'#a5b4fc',400:'#818cf8',500:'#6366f1',600:'#4f46e5',700:'#4338ca',800:'#3730a3',900:'#312e81' }
+          }
+        }
+      }
+    }
+  </script>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="bg-gray-900 text-gray-100 antialiased">
+
+<!-- ===== LOGIN ===== -->
+<div id="loginScreen" class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-gray-900 via-gray-900 to-primary-900">
+  <div class="bg-gray-800 rounded-2xl p-8 w-full max-w-md shadow-2xl border border-gray-700">
+    <div class="text-center mb-6">
+      <div class="w-16 h-16 bg-primary-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-primary-900">
+        <span class="text-3xl">🎓</span>
+      </div>
+      <h1 class="text-2xl font-bold text-white">EscolaPro</h1>
+      <p class="text-gray-400 text-sm mt-1">Sistema de Gestão Profissional</p>
+    </div>
+
+    <!-- Tab switcher -->
+    <div class="flex bg-gray-700/50 rounded-xl p-1 mb-5">
+      <button onclick="App.loginTab('employee')" id="ltab-employee"
+        class="flex-1 py-2 rounded-lg text-sm font-medium transition-all bg-primary-600 text-white">
+        👔 Funcionário
+      </button>
+      <button onclick="App.loginTab('student')" id="ltab-student"
+        class="flex-1 py-2 rounded-lg text-sm font-medium transition-all text-gray-400 hover:text-white">
+        🎓 Aluno
+      </button>
+    </div>
+
+    <!-- Funcionário -->
+    <div id="employeeLoginSection">
+      <form id="loginForm" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1">Usuário</label>
+          <input type="text" id="loginUsername" autocomplete="username"
+            class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-colors"
+            placeholder="Digite seu usuário">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1">Senha</label>
+          <input type="password" id="loginPassword" autocomplete="current-password"
+            class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-colors"
+            placeholder="Digite sua senha">
+        </div>
+        <div id="loginError" class="hidden bg-red-900/40 border border-red-700/60 text-red-300 text-sm p-3 rounded-lg"></div>
+        <button type="submit" class="w-full bg-primary-600 hover:bg-primary-700 active:bg-primary-800 text-white font-semibold py-3 px-4 rounded-lg transition-colors duration-200 mt-2">
+          Entrar no Sistema
+        </button>
+      </form>
+      <div class="mt-6 bg-gray-700/50 rounded-xl p-4 space-y-2">
+        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Acessos de Teste</p>
+        <div class="flex items-center justify-between text-sm">
+          <span class="text-gray-400">Gerente:</span>
+          <code class="text-primary-300 bg-gray-700 px-2 py-0.5 rounded text-xs">gerente / escola@2024</code>
+        </div>
+        <div class="flex items-center justify-between text-sm">
+          <span class="text-gray-400">Funcionária:</span>
+          <code class="text-primary-300 bg-gray-700 px-2 py-0.5 rounded text-xs">ana.santos / func@2024</code>
+        </div>
+        <div class="flex items-center justify-between text-sm">
+          <span class="text-gray-400">Master:</span>
+          <code class="text-primary-300 bg-gray-700 px-2 py-0.5 rounded text-xs">master / master@escola</code>
+        </div>
+      </div>
+    </div>
+
+    <!-- Aluno -->
+    <div id="studentLoginSection" class="hidden">
+      <form id="studentLoginForm" class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1">Usuário</label>
+          <input type="text" id="studentUsername" autocomplete="username"
+            class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-colors"
+            placeholder="Seu usuário de aluno">
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-1">Senha</label>
+          <input type="password" id="studentPassword" autocomplete="current-password"
+            class="w-full bg-gray-700 border border-gray-600 rounded-lg px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 focus:ring-1 focus:ring-primary-500 transition-colors"
+            placeholder="Sua senha">
+        </div>
+        <div id="studentLoginError" class="hidden bg-red-900/40 border border-red-700/60 text-red-300 text-sm p-3 rounded-lg"></div>
+        <button type="submit" class="w-full bg-primary-600 hover:bg-primary-700 text-white font-semibold py-3 px-4 rounded-lg transition-colors duration-200">
+          Entrar como Aluno
+        </button>
+      </form>
+      <div class="mt-5 bg-gray-700/50 rounded-xl p-4 space-y-2">
+        <p class="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">Alunos de Teste</p>
+        <div class="flex items-center justify-between text-sm">
+          <span class="text-gray-400">João Carlos:</span>
+          <code class="text-primary-300 bg-gray-700 px-2 py-0.5 rounded text-xs">joao.carlos / aluno123</code>
+        </div>
+        <div class="flex items-center justify-between text-sm">
+          <span class="text-gray-400">Pedro Oliveira:</span>
+          <code class="text-primary-300 bg-gray-700 px-2 py-0.5 rounded text-xs">pedro.oliveira / aluno456</code>
+        </div>
+        <div class="flex items-center justify-between text-sm">
+          <span class="text-gray-400">Fernanda Lima:</span>
+          <code class="text-primary-300 bg-gray-700 px-2 py-0.5 rounded text-xs">fernanda.lima / aluno789</code>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ===== APP ===== -->
+<div id="appScreen" class="hidden min-h-screen flex">
+
+  <!-- Sidebar Overlay (mobile) -->
+  <div id="sidebarOverlay" class="fixed inset-0 bg-black/60 z-40 hidden lg:hidden" onclick="App.closeSidebar()"></div>
+
+  <!-- SIDEBAR -->
+  <aside id="sidebar" class="fixed left-0 top-0 h-full w-64 bg-gray-800 border-r border-gray-700/50 z-50 transform -translate-x-full lg:translate-x-0 transition-all duration-300 flex flex-col">
+    <div class="p-5 border-b border-gray-700/50 flex items-center justify-between">
+      <div id="sidebarLogo" class="flex items-center gap-3">
+        <div class="w-10 h-10 bg-primary-600 rounded-xl flex items-center justify-center flex-shrink-0">
+          <span class="text-xl">🎓</span>
+        </div>
+        <div>
+          <h1 class="text-white font-bold text-sm">EscolaPro</h1>
+          <p class="text-gray-400 text-xs">Gestão Profissional</p>
+        </div>
+      </div>
+      <!-- Logo recolhido (só ícone) -->
+      <div id="sidebarLogoSmall" class="hidden w-10 h-10 bg-primary-600 rounded-xl items-center justify-center flex-shrink-0">
+        <span class="text-xl">🎓</span>
+      </div>
+      <!-- Botão recolher (só desktop) -->
+      <button id="collapseBtn" onclick="App.collapseSidebar()"
+        class="hidden lg:flex items-center justify-center w-7 h-7 rounded-lg bg-gray-700 hover:bg-gray-600 text-gray-400 hover:text-white text-sm transition-all flex-shrink-0"
+        title="Recolher menu">«</button>
+    </div>
+
+    <nav class="flex-1 p-3 space-y-0.5 overflow-y-auto">
+      <a href="#" class="nav-item" data-module="dashboard" onclick="App.navigate('dashboard');return false">
+        <span class="nav-icon">📊</span><span class="nav-label">Dashboard</span>
+      </a>
+      <a href="#" class="nav-item" data-module="visits" onclick="App.navigate('visits');return false">
+        <span class="nav-icon">👁️</span><span class="nav-label">Visitas</span>
+      </a>
+      <a href="#" class="nav-item" data-module="courses" onclick="App.navigate('courses');return false">
+        <span class="nav-icon">📚</span><span class="nav-label">Cursos &amp; Grades</span>
+      </a>
+      <a href="#" class="nav-item" data-module="students" onclick="App.navigate('students');return false">
+        <span class="nav-icon">🎓</span><span class="nav-label">Alunos</span>
+      </a>
+      <a href="#" class="nav-item" data-module="employees" onclick="App.navigate('employees');return false">
+        <span class="nav-icon">👔</span><span class="nav-label">Funcionários</span>
+      </a>
+      <a href="#" class="nav-item" data-module="attendance" onclick="App.navigate('attendance');return false">
+        <span class="nav-icon">✅</span><span class="nav-label">Frequência</span>
+      </a>
+      <a href="#" class="nav-item" data-module="financial" onclick="App.navigate('financial');return false">
+        <span class="nav-icon">💰</span><span class="nav-label">Financeiro</span>
+      </a>
+      <a href="#" class="nav-item" data-module="chat" onclick="App.navigate('chat');return false">
+        <span class="nav-icon">💬</span><span class="nav-label">Chat Alunos</span>
+      </a>
+    </nav>
+
+    <div class="p-4 border-t border-gray-700/50">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 bg-primary-700 rounded-full flex items-center justify-center flex-shrink-0">
+          <span class="text-sm font-bold" id="userInitial">G</span>
+        </div>
+        <div class="flex-1 min-w-0 nav-label">
+          <p class="text-sm font-medium text-white truncate" id="userName">Gerente</p>
+          <p class="text-xs text-gray-400 truncate" id="userRole">Administrador</p>
+        </div>
+        <button onclick="App.logout()" class="text-gray-400 hover:text-red-400 transition-colors p-1 flex-shrink-0" title="Sair">🚪</button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <div id="mainWrapper" class="flex-1 lg:ml-64 flex flex-col min-h-screen transition-all duration-300">
+    <!-- TOP BAR -->
+    <header class="bg-gray-800 border-b border-gray-700/50 px-4 py-3 flex items-center gap-4 sticky top-0 z-30">
+      <button onclick="App.toggleSidebar()" class="lg:hidden text-gray-400 hover:text-white p-1 rounded-lg hover:bg-gray-700 transition-colors">
+        <span class="text-xl">☰</span>
+      </button>
+      <div class="flex-1">
+        <h2 id="pageTitle" class="text-white font-semibold text-sm sm:text-base">Dashboard</h2>
+      </div>
+      <div class="text-xs text-gray-500 hidden sm:block" id="headerTime"></div>
+    </header>
+
+    <!-- CONTENT -->
+    <main id="mainContent" class="flex-1 p-4 lg:p-6 overflow-auto">
+      <div class="flex items-center justify-center h-64 text-gray-500">Carregando...</div>
+    </main>
+  </div>
+</div>
+
+<!-- ===== PORTAL DO ALUNO ===== -->
+<div id="studentPortalScreen" class="hidden min-h-screen flex flex-col bg-gray-900">
+  <!-- Header -->
+  <header class="bg-gray-800 border-b border-gray-700/50 px-4 py-3 flex items-center justify-between sticky top-0 z-30">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 bg-primary-600 rounded-xl flex items-center justify-center flex-shrink-0">
+        <span>🎓</span>
+      </div>
+      <div>
+        <h1 class="text-white font-semibold text-sm">EscolaPro</h1>
+        <p class="text-gray-400 text-xs" id="studentPortalName">Área do Aluno</p>
+      </div>
+    </div>
+    <button onclick="App.studentLogout()" class="text-gray-400 hover:text-red-400 p-2 text-sm flex items-center gap-1 transition-colors">
+      🚪 <span class="hidden sm:inline">Sair</span>
+    </button>
+  </header>
+
+  <!-- Tabs -->
+  <div class="flex border-b border-gray-700/50 bg-gray-800">
+    <button onclick="StudentPortal.tab('aulas')"      class="portal-tab active" id="ptab-aulas">📅 Aulas</button>
+    <button onclick="StudentPortal.tab('pendencias')" class="portal-tab" id="ptab-pendencias">💰 Pendências</button>
+    <button onclick="StudentPortal.tab('reposicoes')" class="portal-tab" id="ptab-reposicoes">🔄 Reposições</button>
+    <button onclick="StudentPortal.tab('chat')"       class="portal-tab" id="ptab-chat">💬 Mensagens</button>
+  </div>
+
+  <!-- Content -->
+  <main id="studentPortalContent" class="flex-1 p-4 overflow-auto max-w-2xl mx-auto w-full">
+  </main>
+</div>
+
+<!-- TOAST -->
+<div id="toastContainer" class="fixed bottom-4 right-4 z-[100] space-y-2 pointer-events-none"></div>
+
+<!-- MODAL -->
+<div id="modalOverlay" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[80] hidden items-center justify-center p-4" onclick="if(event.target===this)Utils.closeModal()">
+  <div id="modalBox" class="bg-gray-800 rounded-2xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border border-gray-700/50">
+  </div>
+</div>
+
+<!-- CONFIRM -->
+<div id="confirmOverlay" class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[90] hidden items-center justify-center p-4">
+  <div class="bg-gray-800 rounded-2xl shadow-2xl w-full max-w-sm border border-gray-700/50 p-6">
+    <p class="text-white font-medium text-center mb-6" id="confirmMsg">Confirmar?</p>
+    <div class="flex gap-3">
+      <button onclick="Utils.confirmResolve(false)" class="flex-1 btn-secondary">Cancelar</button>
+      <button onclick="Utils.confirmResolve(true)" class="flex-1 btn-danger">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="js/config.js"></script>
+<script src="js/db.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/audit.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/employees.js"></script>
+<script src="js/visits.js"></script>
+<script src="js/courses.js"></script>
+<script src="js/students.js"></script>
+<script src="js/attendance.js"></script>
+<script src="js/financial.js"></script>
+<script src="js/dashboard.js"></script>
+<script src="js/chat.js"></script>
+<script src="js/student-portal.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
