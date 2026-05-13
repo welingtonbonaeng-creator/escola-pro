@@ -568,8 +568,9 @@ const StudentsModule = (() => {
       </div>`);
   }
 
-  /* ── FORMULÁRIO DE MATRÍCULA ── */
-  function openForm(id = null) {
+  /* ── FORMULÁRIO DE MATRÍCULA ──
+     preSlot: { dia, horario } — pré-seleciona um horário vindo da Grade de Horários */
+  function openForm(id = null, preSlot = null) {
     const s   = id ? DB.findById('students', id) : null;
     const cursos    = DB.get('courses').filter(c => c.ativo);
     const turmas    = DB.get('grades');
@@ -585,8 +586,10 @@ const StudentsModule = (() => {
       extraDesc: mat?.desconto   || 0,
       entrada:   mat?.entrada    || [],
       restante:  mat?.restante   || [],
-      slots:     id ? DB.get('schedule').filter(s=>s.alunoId===id).map(s=>({dia:s.dia,horario:s.horario})) : [],
-      editId:    id || null
+      slots: id
+        ? DB.get('schedule').filter(s=>s.alunoId===id).map(s=>({dia:s.dia,horario:s.horario}))
+        : (preSlot ? [{ dia: preSlot.dia, horario: preSlot.horario }] : []),
+      editId: id || null
     };
 
     const cursosOpts = cursos.map(c =>
