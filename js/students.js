@@ -462,11 +462,12 @@ const StudentsModule = (() => {
 
             /* ── Linha de parcela individual ── */
             const _pRow = (p, isEntrada=false) => {
-              const forma = _forma(p);
-              const borda = p.status==='pago'?'border-l-green-500':p.status==='atrasado'?'border-l-red-500':'border-l-yellow-500';
-              const label = isEntrada
+              const forma  = _forma(p);
+              const borda  = p.status==='pago'?'border-l-green-500':p.status==='atrasado'?'border-l-red-500':'border-l-yellow-500';
+              const label  = isEntrada
                 ? (p.obs || `Entrada — ${FLABEL[forma]||forma||'—'}`)
                 : `Parcela ${p.numero}/${p.total}`;
+              const podeBaixa = p.status==='pendente' || p.status==='atrasado';
               return `<div class="flex items-start justify-between bg-gray-700/20 rounded-lg px-3 py-2 border-l-2 ${borda} text-sm gap-2">
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 flex-wrap">
@@ -479,9 +480,15 @@ const StudentsModule = (() => {
                     ${(p.juros||0)>0?`<span class="text-red-400">+${Utils.currency(p.juros)} juros</span>`:''}
                   </div>
                 </div>
-                <div class="flex items-center gap-2 flex-shrink-0">
-                  <span class="font-bold text-white">${Utils.currency(p.valor+(p.juros||0))}</span>
-                  ${Utils.statusBadge(p.status)}
+                <div class="flex flex-col items-end gap-1.5 flex-shrink-0">
+                  <div class="flex items-center gap-2">
+                    <span class="font-bold text-white">${Utils.currency(p.valor+(p.juros||0))}</span>
+                    ${Utils.statusBadge(p.status)}
+                  </div>
+                  ${podeBaixa ? `<button onclick="StudentsModule.darBaixaEntrada('${p.id}','${id}')"
+                    class="text-xs px-2 py-1 rounded-lg bg-green-800/50 hover:bg-green-700/60 border border-green-700/40 text-green-300 transition-all whitespace-nowrap">
+                    💰 Dar Baixa
+                  </button>` : ''}
                 </div>
               </div>`;
             };
@@ -566,6 +573,108 @@ const StudentsModule = (() => {
           ${Auth.can('alunos','editar')?`<button onclick="Utils.closeModal();StudentsModule.openForm('${id}')" class="btn-primary">✏️ Editar</button>`:''}
         </div>
       </div>`);
+  }
+
+  /* ── DAR BAIXA ── */
+  function darBaixaEntrada(parcelaId, alunoId) {
+    const p = DB.findById('financial', parcelaId);
+    if (!p) return;
+
+    const FLBL = { pix:'Pix', dinheiro:'Dinheiro', cartao_debito:'Cartão Débito', cartao_credito:'Cartão Crédito', boleto:'Boleto' };
+    const formaLabel = FLBL[p.formaPagamento] || p.formaPagamento || '—';
+    const label = p.tipo === 'entrada'
+      ? (p.obs || `Entrada — ${formaLabel}`)
+      : `Parcela ${p.numero}/${p.total}`;
+    const hoje = new Date().toISOString().slice(0, 10);
+
+    Utils.showModal(`
+      <div class="p-6">
+        <div class="flex items-center justify-between mb-5">
+          <h3 class="text-lg font-bold text-white">💰 Dar Baixa</h3>
+          <button onclick="Utils.closeModal()" class="text-gray-400 hover:text-white">✕</button>
+        </div>
+
+        <div class="card card-sm space-y-2 text-sm mb-5 bg-yellow-900/10 border border-yellow-700/30">
+          <div class="stat-row"><span class="text-gray-400">Referência</span><span class="text-yellow-200 font-medium">${label}</span></div>
+          <div class="stat-row"><span class="text-gray-400">Forma</span><span class="text-white">${formaLabel}</span></div>
+          <div class="stat-row"><span class="text-gray-400">Valor total</span><span class="text-white font-bold">${Utils.currency(p.valor)}</span></div>
+        </div>
+
+        <div class="space-y-4">
+          <div>
+            <label class="form-label">Valor pago agora (R$)</label>
+            <input id="baixaValor" type="text" inputmode="decimal" class="input-field"
+              value="${p.valor.toFixed(2).replace('.',',')}"
+              oninput="StudentsModule._calcSaldoBaixa('${parcelaId}')">
+            <p id="baixaSaldo" class="text-xs mt-1 hidden"></p>
+          </div>
+          <div>
+            <label class="form-label">Data do pagamento</label>
+            <input id="baixaData" type="date" class="input-field" value="${hoje}">
+          </div>
+        </div>
+
+        <div class="flex justify-end gap-3 mt-6">
+          <button onclick="Utils.closeModal()" class="btn-secondary">Cancelar</button>
+          <button onclick="StudentsModule.confirmarBaixa('${parcelaId}','${alunoId}')" class="btn-primary">✅ Confirmar Baixa</button>
+        </div>
+      </div>`);
+  }
+
+  function _calcSaldoBaixa(parcelaId) {
+    const p  = DB.findById('financial', parcelaId);
+    if (!p) return;
+    const pago  = Utils.parseBRL(document.getElementById('baixaValor')?.value || '0');
+    const saldo = parseFloat((p.valor - pago).toFixed(2));
+    const el    = document.getElementById('baixaSaldo');
+    if (!el) return;
+    if (saldo > 0.01) {
+      el.className = 'text-xs mt-1 text-yellow-400';
+      el.textContent = `⚠️ Saldo restante de ${Utils.currency(saldo)} ficará pendente como nova entrada`;
+      el.classList.remove('hidden');
+    } else if (saldo < -0.01) {
+      el.className = 'text-xs mt-1 text-red-400';
+      el.textContent = `❌ Valor maior que o total (${Utils.currency(p.valor)})`;
+      el.classList.remove('hidden');
+    } else {
+      el.classList.add('hidden');
+    }
+  }
+
+  function confirmarBaixa(parcelaId, alunoId) {
+    const p = DB.findById('financial', parcelaId);
+    if (!p) return;
+    const pago    = Utils.parseBRL(document.getElementById('baixaValor')?.value || '0');
+    const dataPag = document.getElementById('baixaData')?.value;
+    if (!dataPag) { Utils.showToast('Informe a data do pagamento', 'error'); return; }
+    if (pago <= 0) { Utils.showToast('Valor deve ser maior que zero', 'error'); return; }
+    if (pago > p.valor + 0.01) { Utils.showToast('Valor maior que o total da parcela', 'error'); return; }
+
+    const saldo = parseFloat((p.valor - pago).toFixed(2));
+
+    /* Atualiza a parcela atual com o valor pago */
+    DB.save('financial', { ...p, valor: pago, status: 'pago', dataPagamento: dataPag, updatedAt: new Date().toISOString() });
+
+    /* Se pagamento parcial → cria saldo como novo registro pendente */
+    if (saldo > 0.01) {
+      DB.save('financial', {
+        id: DB._id(), alunoId: p.alunoId, matriculaId: p.matriculaId,
+        numero: p.numero, total: p.total, valor: saldo,
+        vencimento: p.vencimento, dataPagamento: null, status: 'pendente',
+        tipo: p.tipo, formaPagamento: p.formaPagamento, juros: 0,
+        obs: `Saldo pendente — ${FORMAS[p.formaPagamento]||p.formaPagamento||'—'}`,
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      });
+    }
+
+    Utils.closeModal();
+    Utils.showToast(
+      saldo > 0.01
+        ? `✅ Baixa de ${Utils.currency(pago)} confirmada! Saldo de ${Utils.currency(saldo)} pendente.`
+        : '✅ Pagamento confirmado!',
+      'success'
+    );
+    openDetail(alunoId);
   }
 
   /* ── FORMULÁRIO DE MATRÍCULA ──
@@ -931,6 +1040,7 @@ const StudentsModule = (() => {
     addCurso, removeCurso, setComboDesc, setExtraDesc, setCursoValor, formatCursoValor,
     addEntrada, removeEntrada, setEntradaValor, formatEntradaValor, setEntradaParcelas,
     addRestante, removeRestante, setRestanteValor, formatRestanteValor, setRestanteParcelas,
-    toggleSlot
+    toggleSlot,
+    darBaixaEntrada, _calcSaldoBaixa, confirmarBaixa
   };
 })();
