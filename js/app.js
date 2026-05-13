@@ -235,7 +235,7 @@ const App = {
   },
 
   navigate(module) {
-    const _checkMod = module === 'schedule' ? 'alunos' : module;
+    const _checkMod = module === 'schedule' ? 'alunos' : module === 'performance' ? 'financeiro' : module;
     if (!Auth.can(_checkMod,'ver')) { this.denied(); return; }
     this.currentModule = module;
     this.closeSidebar();
@@ -244,7 +244,7 @@ const App = {
       el.classList.toggle('active', el.dataset.module === module);
     });
 
-    const titles = { dashboard:'Dashboard', visits:'Visitas', courses:'Cursos & Grades', students:'Alunos', employees:'Funcionários', schedule:'Grade de Horário', attendance:'Frequência', financial:'Financeiro', chat:'Chat com Alunos' };
+    const titles = { dashboard:'Dashboard', visits:'Visitas', courses:'Cursos & Grades', students:'Alunos', employees:'Funcionários', schedule:'Grade de Horário', attendance:'Frequência', financial:'Financeiro', chat:'Chat com Alunos', performance:'Desempenho' };
     document.getElementById('pageTitle').textContent = titles[module] || module;
 
     const map = {
@@ -257,6 +257,7 @@ const App = {
       attendance: () => AttendanceModule.render(),
       financial:  () => FinancialModule.render(),
       chat:       () => ChatModule.render(),
+      performance:() => PerformanceModule.render(),
     };
     if (map[module]) map[module]();
   },

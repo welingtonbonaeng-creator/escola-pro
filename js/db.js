@@ -18,7 +18,7 @@ let _sb = null;
 })();
 
 /* Mapa de nomes de coleção → tabela Supabase */
-const _TABLE = { employees:'employees', courses:'courses', grades:'grades', visits:'visits', students:'students', financial:'financial', attendance:'attendance', audit:'audit', system_settings:'system_settings', student_auth:'student_auth', chat_messages:'chat_messages', schedule:'schedule' };
+const _TABLE = { employees:'employees', courses:'courses', grades:'grades', visits:'visits', students:'students', financial:'financial', attendance:'attendance', audit:'audit', system_settings:'system_settings', student_auth:'student_auth', chat_messages:'chat_messages', schedule:'schedule', goals:'goals' };
 
 const DB = {
   prefix: 'ep_',
