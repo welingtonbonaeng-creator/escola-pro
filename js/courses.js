@@ -69,7 +69,7 @@ const CoursesModule = (() => {
           </div>
           <div>
             <label class="form-label">Valor (R$) *</label>
-            <input type="number" name="valor" required min="0" step="0.01" class="input-field" value="${c?.valor||''}">
+            <input type="text" inputmode="decimal" name="valor" required class="input-field" placeholder="Ex: 450,00" value="${c?.valor||''}">
           </div>
           <div>
             <label class="form-label">Descrição / Resumo</label>
@@ -98,7 +98,7 @@ const CoursesModule = (() => {
       return;
     }
     const old = id ? DB.findById('courses', id) : null;
-    const rec = { id:id||undefined, nome:d.nome, valor:parseFloat(d.valor), descricao:d.descricao, ativo:d.ativo==='sim' };
+    const rec = { id:id||undefined, nome:d.nome, valor:Utils.parseBRL(d.valor), descricao:d.descricao, ativo:d.ativo==='sim' };
     const saved = DB.save('courses', rec);
     Audit.log('cursos', id?'editar':'criar', saved.id, old, saved);
     Utils.closeModal();

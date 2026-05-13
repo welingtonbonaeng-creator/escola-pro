@@ -137,6 +137,15 @@ const Utils = {
     </div>`;
   },
 
+  /* ── Parser monetário BR (aceita vírgula e ponto como decimal) ── */
+  parseBRL(v) {
+    const s = String(v || '').trim();
+    if (!s) return 0;
+    // "1.234,56" → remove pontos de milhar, troca vírgula por ponto
+    if (s.includes(',')) return parseFloat(s.replace(/\./g, '').replace(',', '.')) || 0;
+    return parseFloat(s) || 0;
+  },
+
   /* ── Loader ── */
   loader() {
     return `<div class="flex justify-center py-16"><div class="w-8 h-8 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div></div>`;

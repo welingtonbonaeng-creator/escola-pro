@@ -8,6 +8,9 @@ const StudentsModule = (() => {
 
   const FORMAS = { pix:'Pix', dinheiro:'Dinheiro', cartao_debito:'Cartão Débito', cartao_credito:'Cartão Crédito', boleto:'Boleto' };
 
+  /* Parser monetário BR — aceita vírgula e ponto */
+  function _parseBRL(v) { return Utils.parseBRL(v); }
+
   /* Cálculo financeiro */
   function _calc() {
     const totalCursos  = _mat.cursos.reduce((s, c) => s + c.valor, 0);
@@ -25,8 +28,9 @@ const StudentsModule = (() => {
     return 'R$ ' + (parseFloat(v)||0).toLocaleString('pt-BR', {minimumFractionDigits:2,maximumFractionDigits:2});
   }
 
-  /* Atualiza as seções dinâmicas do formulário */
-  function _refresh() {
+  /* Atualiza as seções dinâmicas do formulário.
+     skipEntrada=true → não re-renderiza matEntradaList (evita destruir o input durante digitação) */
+  function _refresh(skipEntrada = false) {
     const c = _calc();
 
     /* Lista de cursos */
@@ -63,22 +67,25 @@ const StudentsModule = (() => {
       calcEl.innerHTML = `<div class="card bg-gray-700/40 space-y-1.5 text-sm mb-4">${linhas.join('')}</div>`;
     }
 
-    /* Lista de entrada */
-    const entEl = document.getElementById('matEntradaList');
-    if (entEl) {
-      entEl.innerHTML = !_mat.entrada.length
-        ? '<p class="text-gray-500 text-xs italic pb-1">Sem entrada — valor integral em parcelas</p>'
-        : _mat.entrada.map((en, i) => `
-          <div class="flex items-center gap-2 mb-2">
-            <span class="text-sm text-gray-300 w-32 flex-shrink-0">${FORMAS[en.tipo]||en.tipo}</span>
-            <div class="relative flex-1">
-              <span class="absolute left-3 top-2.5 text-gray-400 text-xs">R$</span>
-              <input type="number" min="0" step="0.01" placeholder="0,00"
-                value="${en.valor||''}" class="input-field pl-8 text-sm"
-                oninput="StudentsModule.setEntradaValor(${i},this.value)">
-            </div>
-            <button type="button" onclick="StudentsModule.removeEntrada(${i})" class="text-red-400 hover:text-red-300 text-xl leading-none flex-shrink-0">×</button>
-          </div>`).join('');
+    /* Lista de entrada — só re-renderiza quando NÃO está digitando */
+    if (!skipEntrada) {
+      const entEl = document.getElementById('matEntradaList');
+      if (entEl) {
+        entEl.innerHTML = !_mat.entrada.length
+          ? '<p class="text-gray-500 text-xs italic pb-1">Sem entrada — valor integral em parcelas</p>'
+          : _mat.entrada.map((en, i) => `
+            <div class="flex items-center gap-2 mb-2">
+              <span class="text-sm text-gray-300 w-32 flex-shrink-0">${FORMAS[en.tipo]||en.tipo}</span>
+              <div class="relative flex-1">
+                <span class="absolute left-3 top-2.5 text-gray-400 text-xs">R$</span>
+                <input type="text" inputmode="decimal" placeholder="0,00"
+                  value="${en.valor||''}" class="input-field pl-8 text-sm"
+                  oninput="StudentsModule.setEntradaValor(${i},this.value)"
+                  onblur="StudentsModule.formatEntradaValor(${i},this)">
+              </div>
+              <button type="button" onclick="StudentsModule.removeEntrada(${i})" class="text-red-400 hover:text-red-300 text-xl leading-none flex-shrink-0">×</button>
+            </div>`).join('');
+      }
     }
 
     /* Bloco parcelas */
@@ -102,8 +109,8 @@ const StudentsModule = (() => {
     _refresh();
   }
 
-  function setComboDesc(v) { _mat.comboDesc = parseFloat(v)||0; _refresh(); }
-  function setExtraDesc(v) { _mat.extraDesc = parseFloat(v)||0; _refresh(); }
+  function setComboDesc(v) { _mat.comboDesc = _parseBRL(v); _refresh(); }
+  function setExtraDesc(v) { _mat.extraDesc = _parseBRL(v); _refresh(); }
 
   function addEntrada(tipo) {
     if (!tipo) return;
@@ -112,7 +119,16 @@ const StudentsModule = (() => {
   }
 
   function removeEntrada(i) { _mat.entrada.splice(i, 1); _refresh(); }
-  function setEntradaValor(i, v) { _mat.entrada[i].valor = parseFloat(v)||0; _refresh(); }
+
+  /* skipEntrada=true evita re-renderizar a lista enquanto o usuário digita */
+  function setEntradaValor(i, v) { _mat.entrada[i].valor = _parseBRL(v); _refresh(true); }
+
+  /* Formata o campo ao sair (onblur) — não re-renderiza lista */
+  function formatEntradaValor(i, el) {
+    const val = _mat.entrada[i]?.valor || 0;
+    if (val > 0) el.value = val.toFixed(2).replace('.', ',');
+  }
+
   function setNParcelas(v) { _mat.nParcelas = parseInt(v)||1; _refresh(); }
   function setFormaParcela(v) { _mat.formaParcela = v; }
 
@@ -407,8 +423,8 @@ const StudentsModule = (() => {
                 <label class="form-label mb-0 flex-shrink-0">Desconto do combo</label>
                 <div class="relative w-40">
                   <span class="absolute left-3 top-2.5 text-gray-400 text-xs">R$</span>
-                  <input type="number" min="0" step="0.01" class="input-field pl-8 text-sm"
-                    placeholder="0,00" value="${_mat.comboDesc||0}"
+                  <input type="text" inputmode="decimal" class="input-field pl-8 text-sm"
+                    placeholder="0,00" value="${_mat.comboDesc||''}"
                     oninput="StudentsModule.setComboDesc(this.value)">
                 </div>
               </div>
@@ -446,8 +462,8 @@ const StudentsModule = (() => {
               <label class="form-label mb-0 flex-shrink-0">Desconto extra</label>
               <div class="relative w-40">
                 <span class="absolute left-3 top-2.5 text-gray-400 text-xs">R$</span>
-                <input type="number" min="0" step="0.01" class="input-field pl-8 text-sm"
-                  placeholder="0,00" value="${_mat.extraDesc||0}"
+                <input type="text" inputmode="decimal" class="input-field pl-8 text-sm"
+                  placeholder="0,00" value="${_mat.extraDesc||''}"
                   oninput="StudentsModule.setExtraDesc(this.value)">
               </div>
             </div>
@@ -634,6 +650,6 @@ const StudentsModule = (() => {
   return {
     render, setFilter, openForm, openDetail, save, remove, search,
     addCurso, removeCurso, setComboDesc, setExtraDesc,
-    addEntrada, removeEntrada, setEntradaValor, setNParcelas, setFormaParcela
+    addEntrada, removeEntrada, setEntradaValor, formatEntradaValor, setNParcelas, setFormaParcela
   };
 })();
