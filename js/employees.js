@@ -4,7 +4,7 @@ const EmployeesModule = (() => {
   const MODULES = [
     { key:'dashboard',   label:'Dashboard' },
     { key:'visitas',     label:'Visitas' },
-    { key:'cursos',      label:'Cursos & Grades' },
+    { key:'cursos',      label:'Cursos' },
     { key:'alunos',      label:'Alunos' },
     { key:'funcionarios',label:'Funcionários' },
     { key:'frequencia',  label:'Frequência' },

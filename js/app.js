@@ -225,7 +225,11 @@ const App = {
 
     document.querySelectorAll('.nav-item').forEach(item => {
       const mod = item.dataset.module;
-      if (mod === 'chat' || mod === 'myperformance') return; // sempre visível
+      if (mod === 'chat') return;
+      if (mod === 'myperformance') {
+        item.style.display = Auth.isEmployee ? '' : 'none';
+        return;
+      }
       item.style.display = (mod && !Auth.can(this._permKey(mod),'ver')) ? 'none' : '';
     });
 
@@ -245,8 +249,9 @@ const App = {
   },
 
   navigate(module) {
-    /* Meu Desempenho é acessível a qualquer funcionário logado */
-    if (module !== 'myperformance') {
+    if (module === 'myperformance') {
+      if (!Auth.isEmployee) { this.denied(); return; }
+    } else {
       const _checkMod = this._permKey(module);
       if (!Auth.can(_checkMod,'ver')) { this.denied(); return; }
     }
@@ -257,7 +262,7 @@ const App = {
       el.classList.toggle('active', el.dataset.module === module);
     });
 
-    const titles = { dashboard:'Dashboard', visits:'Visitas', courses:'Cursos & Grades', students:'Alunos', employees:'Funcionários', schedule:'Grade de Horário', attendance:'Frequência', financial:'Financeiro', chat:'Chat com Alunos', performance:'Desempenho', myperformance:'Meu Desempenho' };
+    const titles = { dashboard:'Dashboard', visits:'Visitas', courses:'Cursos', students:'Alunos', employees:'Funcionários', schedule:'Grade de Horário', attendance:'Frequência', financial:'Financeiro', chat:'Chat com Alunos', performance:'Desempenho', myperformance:'Meu Desempenho' };
     document.getElementById('pageTitle').textContent = titles[module] || module;
 
     const map = {
