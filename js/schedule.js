@@ -238,20 +238,27 @@ const ScheduleModule = (() => {
           </div>
           ${Auth.can('alunos','editar') ? `
           <div class="space-y-3">
+            <!-- Novo aluno direto da grade -->
+            <button onclick="Utils.closeModal();App.navigate('students');setTimeout(()=>StudentsModule.openForm(null,{dia:'${dia}',horario:'${horario}'}),150)"
+              class="w-full py-3 px-4 rounded-xl bg-primary-700 hover:bg-primary-600 text-white font-semibold text-sm flex items-center justify-center gap-2 transition-all">
+              ➕ Matricular Novo Aluno neste Horário
+            </button>
+
+            <div class="flex items-center gap-3">
+              <div class="flex-1 border-t border-gray-700/50"></div>
+              <span class="text-gray-600 text-xs">ou atribuir existente</span>
+              <div class="flex-1 border-t border-gray-700/50"></div>
+            </div>
+
             <div>
-              <label class="form-label">Atribuir Aluno Matriculado</label>
+              <label class="form-label">Aluno Matriculado</label>
               <select id="slotAlunoSel" class="input-field" onchange="if(this.value)document.getElementById('slotVisitaSel').value=''">
                 <option value="">— Selecione um aluno —</option>
                 ${estudantes.map(s => `<option value="${s.id}">${s.nome}</option>`).join('')}
               </select>
             </div>
-            <div class="flex items-center gap-3">
-              <div class="flex-1 border-t border-gray-700/50"></div>
-              <span class="text-gray-600 text-xs">ou</span>
-              <div class="flex-1 border-t border-gray-700/50"></div>
-            </div>
             <div>
-              <label class="form-label">Atribuir Visita Agendada</label>
+              <label class="form-label">Visita Agendada</label>
               <select id="slotVisitaSel" class="input-field" onchange="if(this.value)document.getElementById('slotAlunoSel').value=''">
                 <option value="">— Selecione uma visita —</option>
                 ${visitas.map(v => `<option value="${v.id}">${v.nome}</option>`).join('')}
