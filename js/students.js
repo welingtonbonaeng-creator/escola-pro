@@ -353,7 +353,14 @@ const StudentsModule = (() => {
     const mat     = s.matriculas?.[0];
     const cursos  = mat?.comboCursos?.length ? mat.comboCursos : (mat?.cursoId ? [DB.findById('courses',mat.cursoId)].filter(Boolean).map(c=>({nome:c.nome,valor:c.valor})) : []);
     const turma   = mat ? DB.findById('grades', mat.turmaId) : null;
-    const parcelas = DB.findBy('financial','alunoId',id);
+    const _rawParcelas = DB.findBy('financial','alunoId',id);
+    /* Deduplica registros com mesma chave tipo+numero+vencimento (duplicatas antigas) */
+    const _seenKeys = new Set();
+    const parcelas = _rawParcelas.filter(p => {
+      const k = `${p.tipo}|${p.numero||0}|${p.vencimento}`;
+      if (_seenKeys.has(k)) return false;
+      _seenKeys.add(k); return true;
+    });
     const func    = mat ? DB.findById('employees', mat.funcionarioId) : null;
     const freq    = DB.findBy('attendance','alunoId',id);
     const presencas = freq.filter(f=>f.presente).length;
@@ -441,17 +448,30 @@ const StudentsModule = (() => {
             const FLABEL = { pix:'Pix', dinheiro:'Dinheiro', cartao_debito:'Cartão Débito', cartao_credito:'Cartão Crédito', boleto:'Boleto' };
             const FICON  = { pix:'🟢', dinheiro:'💵', cartao_debito:'🔵', cartao_credito:'🟣', boleto:'🟡' };
 
+            /* Retorna a forma de pagamento — usa formaPagamento ou extrai do obs para registros antigos */
+            const _forma = p => {
+              if (p.formaPagamento) return p.formaPagamento;
+              const obs = (p.obs||'').toLowerCase();
+              if (obs.includes('pix'))                               return 'pix';
+              if (obs.includes('dinheiro'))                          return 'dinheiro';
+              if (obs.includes('débito') || obs.includes('debito'))  return 'cartao_debito';
+              if (obs.includes('crédito')|| obs.includes('credito')) return 'cartao_credito';
+              if (obs.includes('boleto'))                            return 'boleto';
+              return null;
+            };
+
             /* ── Linha de parcela individual ── */
             const _pRow = (p, isEntrada=false) => {
+              const forma = _forma(p);
               const borda = p.status==='pago'?'border-l-green-500':p.status==='atrasado'?'border-l-red-500':'border-l-yellow-500';
               const label = isEntrada
-                ? (p.obs || `Entrada — ${FLABEL[p.formaPagamento]||p.formaPagamento||'—'}`)
+                ? (p.obs || `Entrada — ${FLABEL[forma]||forma||'—'}`)
                 : `Parcela ${p.numero}/${p.total}`;
               return `<div class="flex items-start justify-between bg-gray-700/20 rounded-lg px-3 py-2 border-l-2 ${borda} text-sm gap-2">
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 flex-wrap">
                     <span class="font-medium ${isEntrada?'text-yellow-200':'text-gray-200'}">${label}</span>
-                    <span class="text-xs px-1.5 py-0.5 rounded bg-gray-600/60 text-gray-400">${FLABEL[p.formaPagamento]||p.formaPagamento||'—'}</span>
+                    <span class="text-xs px-1.5 py-0.5 rounded bg-gray-600/60 text-gray-300">${FICON[forma]||'💳'} ${FLABEL[forma]||forma||'—'}</span>
                   </div>
                   <div class="flex items-center gap-3 mt-0.5 text-xs flex-wrap">
                     <span class="text-gray-500">📅 Venc: <span class="${p.status==='atrasado'?'text-red-400 font-semibold':'text-gray-400'}">${Utils.formatDate(p.vencimento)}</span></span>
@@ -472,11 +492,11 @@ const StudentsModule = (() => {
             if (entradas.length) {
               const totalEnt  = entradas.reduce((a,p)=>a+p.valor,0);
               const pagoEnt   = entradas.filter(p=>p.status==='pago').reduce((a,p)=>a+p.valor,0);
-              const formasEnt = [...new Set(entradas.map(p=>p.formaPagamento))];
+              const formasEnt = [...new Set(entradas.map(p=>_forma(p)).filter(Boolean))];
               html += `<div class="mb-4">
                 <div class="flex items-center justify-between mb-2">
                   <span class="text-xs font-semibold text-yellow-300 uppercase tracking-wide">💵 Ato / Entrada</span>
-                  <span class="text-xs text-gray-500">${formasEnt.map(f=>`${FLABEL[f]||f}`).join(' + ')} · ${Utils.currency(totalEnt)} · ${Utils.currency(pagoEnt)} pago</span>
+                  <span class="text-xs text-gray-500">${formasEnt.map(f=>`${FICON[f]||'💳'} ${FLABEL[f]||f}`).join(' + ')} · ${Utils.currency(totalEnt)} · ${Utils.currency(pagoEnt)} pago</span>
                 </div>
                 <div class="space-y-1.5">${entradas.map(p=>_pRow(p,true)).join('')}</div>
               </div>`;
@@ -486,7 +506,7 @@ const StudentsModule = (() => {
             if (mensais.length) {
               const totalMens = mensais.reduce((a,p)=>a+p.valor,0);
               const pagoMens  = mensais.filter(p=>p.status==='pago').reduce((a,p)=>a+p.valor,0);
-              const formasMens= [...new Set(mensais.map(p=>p.formaPagamento))];
+              const formasMens= [...new Set(mensais.map(p=>_forma(p)))];
 
               html += `<div>
                 <div class="flex items-center justify-between mb-2">
@@ -497,15 +517,15 @@ const StudentsModule = (() => {
               if (formasMens.length > 1) {
                 /* Múltiplas formas → cada uma vira um bloco com cabeçalho */
                 formasMens.forEach(forma => {
-                  const grupo     = mensais.filter(p=>p.formaPagamento===forma);
-                  const totG      = grupo.reduce((a,p)=>a+p.valor,0);
-                  const pagoG     = grupo.filter(p=>p.status==='pago').reduce((a,p)=>a+p.valor,0);
-                  const nParcG    = grupo.length;
-                  const valorMed  = nParcG>0 ? totG/nParcG : 0;
+                  const grupo    = mensais.filter(p=>_forma(p)===forma);
+                  const totG     = grupo.reduce((a,p)=>a+p.valor,0);
+                  const pagoG    = grupo.filter(p=>p.status==='pago').reduce((a,p)=>a+p.valor,0);
+                  const nParcG   = grupo.length;
+                  const valorMed = nParcG>0 ? totG/nParcG : 0;
                   html += `<div class="mb-3">
                     <div class="flex items-center gap-2 mb-1.5 px-1">
                       <span class="text-base">${FICON[forma]||'💳'}</span>
-                      <span class="text-sm font-semibold text-white">${FLABEL[forma]||forma}</span>
+                      <span class="text-sm font-semibold text-white">${FLABEL[forma]||forma||'—'}</span>
                       <span class="text-xs text-gray-400">— ${nParcG}x de ${Utils.currency(valorMed)}</span>
                       <span class="ml-auto text-xs text-gray-500">${grupo.filter(p=>p.status==='pago').length}/${nParcG} pagas · ${Utils.currency(pagoG)} de ${Utils.currency(totG)}</span>
                     </div>
