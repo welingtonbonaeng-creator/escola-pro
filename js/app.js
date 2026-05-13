@@ -226,7 +226,6 @@ const App = {
 
     document.querySelectorAll('.nav-item').forEach(item => {
       const mod = item.dataset.module;
-      if (mod === 'chat') return;
       if (mod === 'myperformance') { item.style.display = Auth.isEmployee ? '' : 'none'; return; }
       if (mod === 'staffchat')     { item.style.display = Auth.isEmployee ? '' : 'none'; return; }
       item.style.display = (mod && !Auth.can(this._permKey(mod),'ver')) ? 'none' : '';
@@ -260,7 +259,8 @@ const App = {
     const map = {
       visits:'visitas', courses:'cursos', students:'alunos',
       employees:'funcionarios', attendance:'frequencia', financial:'financeiro',
-      schedule:'alunos', performance:'financeiro'
+      schedule:'alunos', performance:'financeiro',
+      chat:'alunos'
     };
     return map[mod] || mod;
   },
