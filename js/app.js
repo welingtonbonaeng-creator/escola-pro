@@ -226,16 +226,26 @@ const App = {
     document.querySelectorAll('.nav-item').forEach(item => {
       const mod = item.dataset.module;
       if (mod === 'chat') return;
-      item.style.display = (mod && !Auth.can(mod,'ver')) ? 'none' : '';
+      item.style.display = (mod && !Auth.can(this._permKey(mod),'ver')) ? 'none' : '';
     });
 
     const mods = ['dashboard','visits','courses','students','employees','attendance','financial'];
-    const first = mods.find(m => Auth.can(m,'ver')) || 'dashboard';
+    const first = mods.find(m => Auth.can(this._permKey(m),'ver')) || 'dashboard';
     this.navigate(first);
   },
 
+  /* Mapeia nome do módulo (nav/inglês) para chave de permissão (português) */
+  _permKey(mod) {
+    const map = {
+      visits:'visitas', courses:'cursos', students:'alunos',
+      employees:'funcionarios', attendance:'frequencia', financial:'financeiro',
+      schedule:'alunos', performance:'financeiro'
+    };
+    return map[mod] || mod;
+  },
+
   navigate(module) {
-    const _checkMod = module === 'schedule' ? 'alunos' : module === 'performance' ? 'financeiro' : module;
+    const _checkMod = this._permKey(module);
     if (!Auth.can(_checkMod,'ver')) { this.denied(); return; }
     this.currentModule = module;
     this.closeSidebar();
