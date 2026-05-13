@@ -112,12 +112,30 @@ const FinancialModule = (() => {
   function openDetail(id) {
     const s = DB.findById('students', id);
     if (!s) return;
-    const parcelas = DB.get('financial').filter(p=>p.alunoId===id).sort((a,b)=>a.numero-b.numero);
+    const allParcelas = DB.get('financial').filter(p=>p.alunoId===id);
+    const entradas = allParcelas.filter(p=>p.tipo==='entrada').sort((a,b)=>a.numero-b.numero);
+    const mensais  = allParcelas.filter(p=>p.tipo!=='entrada').sort((a,b)=>a.numero-b.numero);
     const mat = s.matriculas?.[0];
     const curso = mat ? DB.findById('courses', mat.cursoId) : null;
-    const total = parcelas.reduce((a,p)=>a+(p.valor+(p.juros||0)),0);
-    const pago  = parcelas.filter(p=>p.status==='pago').reduce((a,p)=>a+p.valor,0);
-    const inadimplente = parcelas.some(p=>p.status==='atrasado');
+    const total = allParcelas.reduce((a,p)=>a+(p.valor+(p.juros||0)),0);
+    const pago  = allParcelas.filter(p=>p.status==='pago').reduce((a,p)=>a+p.valor,0);
+    const inadimplente = allParcelas.some(p=>p.status==='atrasado');
+
+    const _parcelaRow = (p, labelFn) => `
+      <div class="flex items-center justify-between bg-gray-700/30 rounded-lg px-3 py-2 text-sm">
+        <div>
+          <span class="font-medium">${labelFn(p)}</span>
+          <span class="text-gray-500 ml-2 text-xs">Venc: ${Utils.formatDate(p.vencimento)}</span>
+        </div>
+        <div class="flex items-center gap-2 flex-wrap justify-end">
+          <span class="font-bold">${Utils.currency(p.valor)}</span>
+          ${p.juros>0?`<span class="text-red-400 text-xs">+${Utils.currency(p.juros)} juros</span>`:''}
+          ${Utils.statusBadge(p.status)}
+          ${p.status!=='pago' && Auth.can('financeiro','criar')?`
+          <button onclick="FinancialModule.registerPayment('${id}','${p.id}')" class="btn-success btn-sm">💰 Pagar</button>`:''}
+          ${p.dataPagamento?`<span class="text-xs text-gray-500">${Utils.formatDate(p.dataPagamento)}</span>`:''}
+        </div>
+      </div>`;
 
     Utils.showModal(`
       <div class="p-6 space-y-5">
@@ -129,9 +147,11 @@ const FinancialModule = (() => {
         <div class="card card-sm space-y-2 text-sm">
           <div class="stat-row"><span class="text-gray-400">Curso</span><span class="text-white">${curso?.nome||'—'}</span></div>
           <div class="stat-row"><span class="text-gray-400">Status</span>${Utils.statusBadge(s.status)}</div>
-          <div class="stat-row"><span class="text-gray-400">Valor Total</span><span class="text-white font-bold">${Utils.currency(mat?.valorTotal||0)}</span></div>
-          ${mat?.desconto?`<div class="stat-row"><span class="text-gray-400">Desconto</span><span class="text-green-400">- ${Utils.currency(mat.desconto)}</span></div>`:''}
-          <div class="stat-row"><span class="text-gray-400">Já Pago</span><span class="text-green-400 font-bold">${Utils.currency(pago)}</span></div>
+          <div class="stat-row"><span class="text-gray-400">Valor Contrato</span><span class="text-white font-bold">${Utils.currency(mat?.valorFinal||mat?.valorTotal||0)}</span></div>
+          ${(mat?.comboDesc||0)>0?`<div class="stat-row"><span class="text-gray-400">Desc. combo</span><span class="text-green-400">- ${Utils.currency(mat.comboDesc)}</span></div>`:''}
+          ${(mat?.desconto||0)>0?`<div class="stat-row"><span class="text-gray-400">Desc. extra</span><span class="text-green-400">- ${Utils.currency(mat.desconto)}</span></div>`:''}
+          ${(mat?.totalEntrada||0)>0?`<div class="stat-row"><span class="text-gray-400">Entrada (ato)</span><span class="text-yellow-300">${Utils.currency(mat.totalEntrada)}</span></div>`:''}
+          <div class="stat-row border-t border-gray-600 pt-2"><span class="text-gray-400">Já Pago</span><span class="text-green-400 font-bold">${Utils.currency(pago)}</span></div>
           <div class="stat-row"><span class="text-gray-400">Pendente</span><span class="${inadimplente?'text-red-400':'text-yellow-400'} font-bold">${Utils.currency(total-pago)}</span></div>
         </div>
 
@@ -152,26 +172,24 @@ const FinancialModule = (() => {
           </div>
         </div>`:''}
 
-        <!-- Parcelas -->
+        <!-- Financeiro: Entrada + Parcelas -->
         <div>
-          <p class="section-title">Parcelas</p>
+          <p class="section-title">Financeiro</p>
+          ${entradas.length ? `
+          <p class="text-xs text-yellow-400 mb-2">💵 Ato / Entrada:</p>
+          <div class="space-y-2 mb-4">
+            ${entradas.map(p=>_parcelaRow(p, p=>
+              `<span class="text-yellow-200">${p.obs||'Entrada'}</span>`
+            )).join('')}
+          </div>` : ''}
+          ${mensais.length ? `
+          <p class="text-xs text-blue-400 mb-2">📅 Parcelas mensais:</p>
           <div class="space-y-2">
-            ${parcelas.map(p=>`
-              <div class="flex items-center justify-between bg-gray-700/30 rounded-lg px-3 py-2 text-sm">
-                <div>
-                  <span class="text-gray-300 font-medium">Parcela ${p.numero}/${p.total}</span>
-                  <span class="text-gray-500 ml-2 text-xs">Venc: ${Utils.formatDate(p.vencimento)}</span>
-                </div>
-                <div class="flex items-center gap-2">
-                  <span class="text-white font-bold">${Utils.currency(p.valor)}</span>
-                  ${p.juros>0?`<span class="text-red-400 text-xs">+${Utils.currency(p.juros)} juros</span>`:''}
-                  ${Utils.statusBadge(p.status)}
-                  ${p.status!=='pago' && Auth.can('financeiro','criar')?`
-                  <button onclick="FinancialModule.registerPayment('${id}','${p.id}')" class="btn-success btn-sm">💰 Pagar</button>`:''}
-                  ${p.dataPagamento?`<span class="text-xs text-gray-500">${Utils.formatDate(p.dataPagamento)}</span>`:''}
-                </div>
-              </div>`).join('')}
-          </div>
+            ${mensais.map(p=>_parcelaRow(p, p=>
+              `<span class="text-gray-300">Parcela ${p.numero}/${p.total}</span>`
+            )).join('')}
+          </div>` : ''}
+          ${!entradas.length && !mensais.length ? '<p class="text-gray-500 text-sm text-center py-4">Nenhum registro financeiro</p>' : ''}
         </div>
 
         ${s.responsavel?`

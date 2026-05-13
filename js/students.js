@@ -30,23 +30,33 @@ const StudentsModule = (() => {
   }
 
   /* Atualiza as seções dinâmicas do formulário.
-     skipEntrada=true → não re-renderiza matEntradaList (evita destruir o input durante digitação) */
-  function _refresh(skipEntrada = false) {
+     skip: 'cursos' → não re-renderiza matCursosList (evita destruir input de valor durante digitação)
+     skip: 'entrada' → não re-renderiza matEntradaList */
+  function _refresh(skip = '') {
     const c = _calc();
 
     /* Lista de cursos */
-    const cursosEl = document.getElementById('matCursosList');
-    if (cursosEl) {
-      cursosEl.innerHTML = !_mat.cursos.length
-        ? '<p class="text-gray-500 text-sm italic py-2">Nenhum curso selecionado</p>'
-        : _mat.cursos.map((cur, i) => `
-          <div class="flex items-center justify-between py-2 border-b border-gray-700/40 last:border-0">
-            <span class="text-white text-sm font-medium">${cur.nome}</span>
-            <div class="flex items-center gap-3">
-              <span class="text-primary-300 font-semibold text-sm">${_brl(cur.valor)}</span>
-              <button type="button" onclick="StudentsModule.removeCurso(${i})" class="text-red-400 hover:text-red-300 text-xl leading-none">×</button>
-            </div>
-          </div>`).join('');
+    if (skip !== 'cursos') {
+      const cursosEl = document.getElementById('matCursosList');
+      if (cursosEl) {
+        cursosEl.innerHTML = !_mat.cursos.length
+          ? '<p class="text-gray-500 text-sm italic py-2">Nenhum curso selecionado</p>'
+          : _mat.cursos.map((cur, i) => `
+            <div class="flex items-center justify-between py-2 border-b border-gray-700/40 last:border-0">
+              <span class="text-white text-sm font-medium flex-1 mr-3">${cur.nome}</span>
+              <div class="flex items-center gap-2">
+                <div class="relative w-32">
+                  <span class="absolute left-2 top-2.5 text-gray-400 text-xs">R$</span>
+                  <input type="text" inputmode="decimal" placeholder="0,00"
+                    value="${cur.valor > 0 ? Number(cur.valor).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}) : ''}"
+                    class="input-field pl-7 py-1.5 text-sm text-primary-300 font-semibold"
+                    oninput="StudentsModule.setCursoValor(${i},this.value)"
+                    onblur="StudentsModule.formatCursoValor(${i},this)">
+                </div>
+                <button type="button" onclick="StudentsModule.removeCurso(${i})" class="text-red-400 hover:text-red-300 text-xl leading-none">×</button>
+              </div>
+            </div>`).join('');
+      }
     }
 
     /* Linha de combo (só com 2+ cursos) */
@@ -69,23 +79,31 @@ const StudentsModule = (() => {
     }
 
     /* Lista de entrada — só re-renderiza quando NÃO está digitando */
-    if (!skipEntrada) {
+    if (skip !== 'entrada') {
       const entEl = document.getElementById('matEntradaList');
       if (entEl) {
+        const PARC_OPTS = [1,2,3,4,5,6,8,10,12];
         entEl.innerHTML = !_mat.entrada.length
           ? '<p class="text-gray-500 text-xs italic pb-1">Sem entrada — valor integral em parcelas</p>'
-          : _mat.entrada.map((en, i) => `
-            <div class="flex items-center gap-2 mb-2">
-              <span class="text-sm text-gray-300 w-32 flex-shrink-0">${FORMAS[en.tipo]||en.tipo}</span>
-              <div class="relative flex-1">
+          : _mat.entrada.map((en, i) => {
+              const showParcelas = ['cartao_credito','boleto'].includes(en.tipo);
+              return `
+            <div class="flex items-center gap-2 mb-2 flex-wrap sm:flex-nowrap">
+              <span class="text-sm text-gray-300 w-28 flex-shrink-0">${FORMAS[en.tipo]||en.tipo}</span>
+              <div class="relative flex-1 min-w-[100px]">
                 <span class="absolute left-3 top-2.5 text-gray-400 text-xs">R$</span>
                 <input type="text" inputmode="decimal" placeholder="0,00"
                   value="${en.valor > 0 ? Number(en.valor).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}) : ''}" class="input-field pl-8 text-sm"
                   oninput="StudentsModule.setEntradaValor(${i},this.value)"
                   onblur="StudentsModule.formatEntradaValor(${i},this)">
               </div>
+              ${showParcelas ? `
+              <select class="input-field w-auto text-xs py-1.5 flex-shrink-0" title="Parcelas"
+                onchange="StudentsModule.setEntradaParcelas(${i},this.value)">
+                ${PARC_OPTS.map(n=>`<option value="${n}" ${(en.parcelas||1)===n?'selected':''}>${n}x</option>`).join('')}
+              </select>` : ''}
               <button type="button" onclick="StudentsModule.removeEntrada(${i})" class="text-red-400 hover:text-red-300 text-xl leading-none flex-shrink-0">×</button>
-            </div>`).join('');
+            </div>`;}).join('');
       }
     }
 
@@ -115,20 +133,18 @@ const StudentsModule = (() => {
 
   function addEntrada(tipo) {
     if (!tipo) return;
-    _mat.entrada.push({ tipo, valor: 0 });
+    _mat.entrada.push({ tipo, valor: 0, parcelas: 1 });
     _refresh();
   }
 
   function removeEntrada(i) { _mat.entrada.splice(i, 1); _refresh(); }
 
-  /* skipEntrada=true evita re-renderizar a lista enquanto o usuário digita */
-  function setEntradaValor(i, v) { _mat.entrada[i].valor = _parseBRL(v); _refresh(true); }
+  function setEntradaValor(i, v) { _mat.entrada[i].valor = _parseBRL(v); _refresh('entrada'); }
+  function formatEntradaValor(i, el) { const val = _mat.entrada[i]?.valor||0; if(val>0) el.value=val.toFixed(2).replace('.',','); }
+  function setEntradaParcelas(i, v) { _mat.entrada[i].parcelas = parseInt(v)||1; }
 
-  /* Formata o campo ao sair (onblur) — não re-renderiza lista */
-  function formatEntradaValor(i, el) {
-    const val = _mat.entrada[i]?.valor || 0;
-    if (val > 0) el.value = val.toFixed(2).replace('.', ',');
-  }
+  function setCursoValor(i, v) { _mat.cursos[i].valor = _parseBRL(v); _refresh('cursos'); }
+  function formatCursoValor(i, el) { const val = _mat.cursos[i]?.valor||0; if(val>0) el.value=val.toFixed(2).replace('.',','); }
 
   function setNParcelas(v) { _mat.nParcelas = parseInt(v)||1; _refresh(); }
   function setFormaParcela(v) { _mat.formaParcela = v; }
@@ -581,16 +597,28 @@ const StudentsModule = (() => {
       const today = new Date().toISOString().slice(0,10);
       const novas = [];
 
-      /* Entrada paga no ato */
+      /* Entrada paga no ato (suporta parcelamento em cartão/boleto) */
       _mat.entrada.forEach(en => {
-        if (en.valor > 0) {
+        const valorTotal = _parseBRL(en.valor);
+        if (valorTotal <= 0) return;
+        const nParc = en.parcelas || 1;
+        const valorParc = parseFloat((valorTotal / nParc).toFixed(2));
+        for (let p = 0; p < nParc; p++) {
+          const venc = new Date(today);
+          venc.setMonth(venc.getMonth() + p);
           novas.push({
             id: DB._id(), alunoId: saved.id, matriculaId: matId,
-            numero: 0, total: c.nP, valor: parseFloat(_parseBRL(en.valor).toFixed(2)),
-            vencimento: today, dataPagamento: today,
-            status: 'pago', tipo: 'entrada',
+            numero: nParc > 1 ? p+1 : 0,
+            total: nParc > 1 ? nParc : c.nP,
+            valor: valorParc,
+            vencimento: venc.toISOString().slice(0,10),
+            dataPagamento: p === 0 ? today : null,
+            status: p === 0 ? 'pago' : 'pendente',
+            tipo: 'entrada',
             formaPagamento: en.tipo, juros: 0,
-            obs: `Entrada — ${FORMAS[en.tipo]||en.tipo}`,
+            obs: nParc > 1
+              ? `Entrada ${p+1}/${nParc} — ${FORMAS[en.tipo]||en.tipo}`
+              : `Entrada — ${FORMAS[en.tipo]||en.tipo}`,
             createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
           });
         }
@@ -650,7 +678,8 @@ const StudentsModule = (() => {
 
   return {
     render, setFilter, openForm, openDetail, save, remove, search,
-    addCurso, removeCurso, setComboDesc, setExtraDesc,
-    addEntrada, removeEntrada, setEntradaValor, formatEntradaValor, setNParcelas, setFormaParcela
+    addCurso, removeCurso, setComboDesc, setExtraDesc, setCursoValor, formatCursoValor,
+    addEntrada, removeEntrada, setEntradaValor, formatEntradaValor, setEntradaParcelas,
+    setNParcelas, setFormaParcela
   };
 })();
