@@ -672,8 +672,8 @@ const VisitsModule = (() => {
         </div>
 
         <div class="flex gap-3">
-          <button onclick="Utils.closeModal();App.navigate('students')" class="btn-secondary flex-1">Não criar agora</button>
-          <button onclick="VisitsModule.confirmCreateLogin('${alunoId}','${autoUser}','${autoPass}')" class="btn-primary flex-1">✅ Criar Login do Aluno</button>
+          <button onclick="Utils.closeModal();App.navigate('students');setTimeout(()=>StudentsModule.openForm('${alunoId}'),150)" class="btn-secondary flex-1">Pular login e matricular</button>
+          <button onclick="VisitsModule.confirmCreateLogin('${alunoId}','${autoUser}','${autoPass}')" class="btn-primary flex-1">✅ Criar Login e Matricular</button>
         </div>
       </div>`);
   }
@@ -690,6 +690,7 @@ const VisitsModule = (() => {
     Utils.closeModal();
     Utils.showToast(`Login criado: ${finalUser} 🔑`, 'success');
     App.navigate('students');
+    setTimeout(() => StudentsModule.openForm(alunoId), 150);
   }
 
   function search(q) { setFilter('q', q); }

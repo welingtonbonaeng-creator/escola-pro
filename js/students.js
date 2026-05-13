@@ -4,7 +4,7 @@ const StudentsModule = (() => {
   let filter = 'todos';
 
   /* ── Estado temporário do formulário de matrícula ── */
-  let _mat = { cursos:[], comboDesc:0, extraDesc:0, entrada:[], nParcelas:1, formaParcela:'pix' };
+  let _mat = { cursos:[], comboDesc:0, extraDesc:0, entrada:[], restante:[], slots:[], editId:null };
 
   const FORMAS = { pix:'Pix', dinheiro:'Dinheiro', cartao_debito:'Cartão Débito', cartao_credito:'Cartão Crédito', boleto:'Boleto' };
 
@@ -86,12 +86,12 @@ const StudentsModule = (() => {
     const comboDesc    = _mat.cursos.length > 1 ? (_mat.comboDesc || 0) : 0;
     const extraDesc    = _mat.extraDesc || 0;
     const valorFinal   = Math.max(0, totalCursos - comboDesc - extraDesc);
-    /* _parseBRL aceita tanto número quanto string com vírgula ("32,80" → 32.8) */
     const totalEntrada = _mat.entrada.reduce((s, e) => s + _parseBRL(e.valor), 0);
     const restante     = Math.max(0, valorFinal - totalEntrada);
-    const nP           = Math.max(1, parseInt(_mat.nParcelas) || 1);
-    const valorParcela = restante > 0 ? restante / nP : 0;
-    return { totalCursos, comboDesc, extraDesc, valorFinal, totalEntrada, restante, nP, valorParcela };
+    const totalRestanteAlocado = (_mat.restante||[]).reduce((s, r) => s + _parseBRL(r.valor), 0);
+    const nP           = (_mat.restante||[]).length > 0 ? Math.max(...(_mat.restante||[]).map(r=>r.parcelas||1)) : 1;
+    const valorParcela = nP > 0 && restante > 0 ? restante / nP : 0;
+    return { totalCursos, comboDesc, extraDesc, valorFinal, totalEntrada, restante, totalRestanteAlocado, nP, valorParcela };
   }
 
   function _brl(v) {
@@ -142,8 +142,12 @@ const StudentsModule = (() => {
       if (c.extraDesc > 0) linhas.push(`<div class="flex justify-between"><span class="text-gray-400">Desconto extra</span><span class="text-green-400">- ${_brl(c.extraDesc)}</span></div>`);
       linhas.push(`<div class="flex justify-between border-t border-gray-600 pt-2 font-bold text-base"><span class="text-white">Valor Final</span><span class="text-primary-300">${_brl(c.valorFinal)}</span></div>`);
       if (c.totalEntrada > 0) linhas.push(`<div class="flex justify-between"><span class="text-gray-400">(-) Entrada paga</span><span class="text-yellow-300">- ${_brl(c.totalEntrada)}</span></div>`);
-      if (c.restante > 0) linhas.push(`<div class="flex justify-between border-t border-gray-600 pt-2"><span class="text-gray-300">Restante em ${c.nP}x</span><span class="text-white font-bold">${_brl(c.valorParcela)}<span class="text-xs text-gray-400">/mês</span></span></div>`);
-      else if (c.valorFinal > 0 && c.totalEntrada >= c.valorFinal) linhas.push(`<div class="text-center text-green-400 text-xs py-1">✅ Valor totalmente coberto pela entrada</div>`);
+      if (c.restante > 0) {
+        linhas.push(`<div class="flex justify-between border-t border-gray-600 pt-2"><span class="text-gray-300">Restante a pagar</span><span class="text-white font-bold">${_brl(c.restante)}</span></div>`);
+        const diff = parseFloat((c.restante - c.totalRestanteAlocado).toFixed(2));
+        if (diff > 0.01) linhas.push(`<div class="flex justify-between text-xs"><span class="text-orange-400">⚠ Não alocado</span><span class="text-orange-300">${_brl(diff)}</span></div>`);
+        else if ((_mat.restante||[]).length > 0) linhas.push(`<div class="text-center text-green-400 text-xs py-1">✅ Restante totalmente alocado</div>`);
+      } else if (c.valorFinal > 0 && c.totalEntrada >= c.valorFinal) linhas.push(`<div class="text-center text-green-400 text-xs py-1">✅ Valor totalmente coberto pela entrada</div>`);
       calcEl.innerHTML = `<div class="card bg-gray-700/40 space-y-1.5 text-sm mb-4">${linhas.join('')}</div>`;
     }
 
@@ -151,11 +155,11 @@ const StudentsModule = (() => {
     if (skip !== 'entrada') {
       const entEl = document.getElementById('matEntradaList');
       if (entEl) {
-        const PARC_OPTS = [1,2,3,4,5,6,8,10,12];
+        const PARC_OPTS_E = [1,2,3,4,5,6,8,10,12,15,18,24];
         entEl.innerHTML = !_mat.entrada.length
           ? '<p class="text-gray-500 text-xs italic pb-1">Sem entrada — valor integral em parcelas</p>'
           : _mat.entrada.map((en, i) => {
-              const showParcelas = ['cartao_credito','boleto'].includes(en.tipo);
+              const pOpts = PARC_OPTS_E.map(n=>`<option value="${n}" ${(en.parcelas||1)===n?'selected':''}>${n}x</option>`).join('');
               return `
             <div class="flex items-center gap-2 mb-2 flex-wrap sm:flex-nowrap">
               <span class="text-sm text-gray-300 w-28 flex-shrink-0">${FORMAS[en.tipo]||en.tipo}</span>
@@ -166,13 +170,41 @@ const StudentsModule = (() => {
                   oninput="StudentsModule.setEntradaValor(${i},this.value)"
                   onblur="StudentsModule.formatEntradaValor(${i},this)">
               </div>
-              ${showParcelas ? `
-              <select class="input-field w-auto text-xs py-1.5 flex-shrink-0" title="Parcelas"
+              <select class="input-field w-20 text-xs py-1.5 flex-shrink-0" title="Parcelas"
                 onchange="StudentsModule.setEntradaParcelas(${i},this.value)">
-                ${PARC_OPTS.map(n=>`<option value="${n}" ${(en.parcelas||1)===n?'selected':''}>${n}x</option>`).join('')}
-              </select>` : ''}
+                ${pOpts}
+              </select>
               <button type="button" onclick="StudentsModule.removeEntrada(${i})" class="text-red-400 hover:text-red-300 text-xl leading-none flex-shrink-0">×</button>
             </div>`;}).join('');
+      }
+    }
+
+    /* Lista do restante (múltiplas formas) */
+    if (skip !== 'restante') {
+      const restEl = document.getElementById('matRestanteList');
+      if (restEl) {
+        const PARC_OPTS_R = [1,2,3,4,5,6,8,10,12,15,18,24];
+        restEl.innerHTML = !(_mat.restante||[]).length
+          ? '<p class="text-gray-500 text-xs italic pb-1">Sem formas adicionadas — adicione acima</p>'
+          : (_mat.restante||[]).map((re, i) => {
+              const pOpts = PARC_OPTS_R.map(n=>`<option value="${n}" ${(re.parcelas||1)===n?'selected':''}>${n}x</option>`).join('');
+              return `
+            <div class="flex items-center gap-2 mb-2 flex-wrap sm:flex-nowrap">
+              <span class="text-sm text-gray-300 w-28 flex-shrink-0">${FORMAS[re.tipo]||re.tipo}</span>
+              <div class="relative flex-1 min-w-[100px]">
+                <span class="absolute left-3 top-2.5 text-gray-400 text-xs">R$</span>
+                <input type="text" inputmode="decimal" placeholder="0,00"
+                  value="${re.valor > 0 ? Number(re.valor).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}) : ''}" class="input-field pl-8 text-sm"
+                  oninput="StudentsModule.setRestanteValor(${i},this.value)"
+                  onblur="StudentsModule.formatRestanteValor(${i},this)">
+              </div>
+              <select class="input-field w-20 text-xs py-1.5 flex-shrink-0" title="Parcelas"
+                onchange="StudentsModule.setRestanteParcelas(${i},this.value)">
+                ${pOpts}
+              </select>
+              <button type="button" onclick="StudentsModule.removeRestante(${i})" class="text-red-400 hover:text-red-300 text-xl leading-none flex-shrink-0">×</button>
+            </div>`;
+            }).join('');
       }
     }
 
@@ -180,9 +212,9 @@ const StudentsModule = (() => {
     const slotEl = document.getElementById('matSlotGrid');
     if (slotEl) slotEl.innerHTML = _renderSlotSelector();
 
-    /* Bloco parcelas */
-    const parcEl = document.getElementById('matParcelasBox');
-    if (parcEl) parcEl.classList.toggle('hidden', c.restante <= 0 && c.valorFinal > 0);
+    /* Bloco restante */
+    const restBoxEl = document.getElementById('matRestanteBox');
+    if (restBoxEl) restBoxEl.classList.toggle('hidden', c.restante <= 0 && c.valorFinal > 0);
   }
 
   /* ── Ações do formulário ── */
@@ -214,13 +246,23 @@ const StudentsModule = (() => {
 
   function setEntradaValor(i, v) { _mat.entrada[i].valor = _parseBRL(v); _refresh('entrada'); }
   function formatEntradaValor(i, el) { const val = _mat.entrada[i]?.valor||0; if(val>0) el.value=val.toFixed(2).replace('.',','); }
-  function setEntradaParcelas(i, v) { _mat.entrada[i].parcelas = parseInt(v)||1; }
+  function setEntradaParcelas(i, v) { if (_mat.entrada[i]) _mat.entrada[i].parcelas = parseInt(v)||1; }
+
+  function addRestante(tipo) {
+    if (!tipo) return;
+    const c = _calc();
+    const jaAlocado = (_mat.restante||[]).reduce((a,r) => a + _parseBRL(r.valor), 0);
+    const auto = parseFloat(Math.max(0, c.restante - jaAlocado).toFixed(2));
+    (_mat.restante = _mat.restante||[]).push({ tipo, valor: auto, parcelas: 1 });
+    _refresh();
+  }
+  function removeRestante(i) { (_mat.restante||[]).splice(i, 1); _refresh(); }
+  function setRestanteValor(i, v) { if ((_mat.restante||[])[i]) { _mat.restante[i].valor = _parseBRL(v); _refresh('restante'); } }
+  function formatRestanteValor(i, el) { const val = (_mat.restante||[])[i]?.valor||0; if(val>0) el.value=val.toFixed(2).replace('.',','); }
+  function setRestanteParcelas(i, v) { if ((_mat.restante||[])[i]) _mat.restante[i].parcelas = parseInt(v)||1; }
 
   function setCursoValor(i, v) { _mat.cursos[i].valor = _parseBRL(v); _refresh('cursos'); }
   function formatCursoValor(i, el) { const val = _mat.cursos[i]?.valor||0; if(val>0) el.value=val.toFixed(2).replace('.',','); }
-
-  function setNParcelas(v) { _mat.nParcelas = parseInt(v)||1; _refresh(); }
-  function setFormaParcela(v) { _mat.formaParcela = v; }
 
   /* ── RENDER ── */
   function render() {
@@ -449,13 +491,12 @@ const StudentsModule = (() => {
       cursos: mat?.comboCursos?.length
         ? mat.comboCursos
         : (mat?.cursoId ? [{ cursoId:mat.cursoId, nome: DB.findById('courses',mat.cursoId)?.nome||'', valor: DB.findById('courses',mat.cursoId)?.valor||0 }] : []),
-      comboDesc:    mat?.comboDesc   || 0,
-      extraDesc:    mat?.desconto    || 0,
-      entrada:      mat?.entrada     || [],
-      nParcelas:    mat?.totalParcelas || 1,
-      formaParcela: mat?.formasPagamento?.find(f=>f.tipo!=='entrada')?.tipo || 'pix',
-      slots:        id ? DB.get('schedule').filter(s=>s.alunoId===id).map(s=>({dia:s.dia,horario:s.horario})) : [],
-      editId:       id || null
+      comboDesc: mat?.comboDesc  || 0,
+      extraDesc: mat?.desconto   || 0,
+      entrada:   mat?.entrada    || [],
+      restante:  mat?.restante   || [],
+      slots:     id ? DB.get('schedule').filter(s=>s.alunoId===id).map(s=>({dia:s.dia,horario:s.horario})) : [],
+      editId:    id || null
     };
 
     const cursosOpts = cursos.map(c =>
@@ -470,9 +511,6 @@ const StudentsModule = (() => {
       `<option value="${e.id}" ${mat?.funcionarioId===e.id?'selected':''}>${e.nome}</option>`
     ).join('');
 
-    const parcelasOpts = [1,2,3,4,5,6,8,10,12,15,18,24,36].map(n =>
-      `<option value="${n}" ${_mat.nParcelas===n?'selected':''}>${n}x</option>`
-    ).join('');
 
     Utils.showModal(`<div class="p-6">
         <div class="flex items-center justify-between mb-5">
@@ -605,26 +643,23 @@ const StudentsModule = (() => {
               <div id="matEntradaList"></div>
             </div>
 
-            <!-- Parcelas mensais -->
-            <div id="matParcelasBox" class="bg-blue-900/15 border border-blue-700/30 rounded-xl p-4">
-              <p class="text-sm font-semibold text-blue-300 mb-3">📅 Parcelas Mensais (Restante)</p>
-              <div class="grid grid-cols-2 gap-3">
+            <!-- Valor Restante (múltiplas formas, cada uma parcelável até 24x) -->
+            <div id="matRestanteBox" class="bg-blue-900/15 border border-blue-700/30 rounded-xl p-4">
+              <div class="flex items-center justify-between mb-3">
                 <div>
-                  <label class="form-label">Número de Parcelas</label>
-                  <select class="input-field" onchange="StudentsModule.setNParcelas(this.value)">
-                    ${parcelasOpts}
-                  </select>
+                  <p class="text-sm font-semibold text-blue-300">📅 Valor Restante</p>
+                  <p class="text-xs text-gray-500 mt-0.5">Mescle formas e parcele em até 24x cada</p>
                 </div>
-                <div>
-                  <label class="form-label">Forma de Pagamento</label>
-                  <select class="input-field" onchange="StudentsModule.setFormaParcela(this.value)">
-                    <option value="pix"           ${_mat.formaParcela==='pix'?'selected':''}>Pix</option>
-                    <option value="boleto"         ${_mat.formaParcela==='boleto'?'selected':''}>Boleto</option>
-                    <option value="cartao_debito"  ${_mat.formaParcela==='cartao_debito'?'selected':''}>Cartão Débito</option>
-                    <option value="cartao_credito" ${_mat.formaParcela==='cartao_credito'?'selected':''}>Cartão Crédito</option>
-                  </select>
-                </div>
+                <select onchange="StudentsModule.addRestante(this.value);this.value=''" class="input-field w-auto text-xs py-1.5 pr-7">
+                  <option value="">+ Forma de Pagamento</option>
+                  <option value="pix">Pix</option>
+                  <option value="dinheiro">Dinheiro</option>
+                  <option value="cartao_debito">Cartão Débito</option>
+                  <option value="cartao_credito">Cartão Crédito</option>
+                  <option value="boleto">Boleto</option>
+                </select>
               </div>
+              <div id="matRestanteList"></div>
             </div>
           </div>
 
@@ -670,11 +705,12 @@ const StudentsModule = (() => {
       totalEntrada: c.totalEntrada,
       valorFinal:  c.valorFinal,
       totalParcelas: c.nP,
-      valorParcela:  parseFloat(c.valorParcela.toFixed(2)),
+      valorParcela:  parseFloat((c.valorParcela||0).toFixed(2)),
       valorTotal:  c.totalCursos,
+      restante:    _mat.restante,
       formasPagamento: [
-        ..._mat.entrada.map(en => ({ tipo: en.tipo, valor: en.valor })),
-        ...(c.restante > 0 ? [{ tipo: _mat.formaParcela, valor: c.restante }] : [])
+        ..._mat.entrada.map(en => ({ tipo: en.tipo, valor: en.valor, parcelas: en.parcelas||1 })),
+        ...(_mat.restante||[]).map(re => ({ tipo: re.tipo, valor: re.valor, parcelas: re.parcelas||1 }))
       ],
       slots: _mat.slots.map(s => ({ dia: s.dia, horario: s.horario })),
       createdAt: matOld.createdAt || new Date().toISOString()
@@ -736,23 +772,28 @@ const StudentsModule = (() => {
         }
       });
 
-      /* Parcelas mensais */
-      if (c.restante > 0 && c.nP > 0) {
-        const inicio = new Date(d.dataInicio);
-        for (let i = 0; i < c.nP; i++) {
+      /* Valor restante — múltiplas formas, cada uma com parcelamento independente */
+      const inicio = new Date(d.dataInicio);
+      (_mat.restante||[]).forEach(re => {
+        const valorTotal = _parseBRL(re.valor);
+        if (valorTotal <= 0) return;
+        const nParc = re.parcelas || 1;
+        const valorParc = parseFloat((valorTotal / nParc).toFixed(2));
+        for (let p = 0; p < nParc; p++) {
           const venc = new Date(inicio);
-          venc.setMonth(venc.getMonth() + i);
+          venc.setMonth(venc.getMonth() + p);
           novas.push({
             id: DB._id(), alunoId: saved.id, matriculaId: matId,
-            numero: i+1, total: c.nP,
-            valor: parseFloat(c.valorParcela.toFixed(2)),
+            numero: p+1, total: nParc,
+            valor: valorParc,
             vencimento: venc.toISOString().slice(0,10),
             dataPagamento: null, status: 'pendente', tipo: 'mensalidade',
-            formaPagamento: _mat.formaParcela, juros: 0, obs: '',
+            formaPagamento: re.tipo, juros: 0,
+            obs: nParc > 1 ? `Parcela ${p+1}/${nParc} — ${FORMAS[re.tipo]||re.tipo}` : (FORMAS[re.tipo]||re.tipo),
             createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
           });
         }
-      }
+      });
 
       const existentes = DB.get('financial').filter(p => p.matriculaId !== matId);
       DB.set('financial', [...existentes, ...novas]);
@@ -792,6 +833,7 @@ const StudentsModule = (() => {
     render, setFilter, openForm, openDetail, save, remove, search,
     addCurso, removeCurso, setComboDesc, setExtraDesc, setCursoValor, formatCursoValor,
     addEntrada, removeEntrada, setEntradaValor, formatEntradaValor, setEntradaParcelas,
-    setNParcelas, setFormaParcela, toggleSlot
+    addRestante, removeRestante, setRestanteValor, formatRestanteValor, setRestanteParcelas,
+    toggleSlot
   };
 })();
