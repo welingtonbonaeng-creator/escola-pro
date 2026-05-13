@@ -434,32 +434,102 @@ const StudentsModule = (() => {
           </div>
         </div>
 
-        <!-- Financeiro -->
+        <!-- Plano de Pagamento -->
         <div>
-          <p class="section-title">Parcelas</p>
-          ${entradas.length ? `
-          <p class="text-xs text-yellow-400 mb-2">💵 Entrada paga no ato:</p>
-          ${entradas.map(p=>`
-          <div class="flex items-center justify-between py-1.5 border-b border-gray-700/30 text-sm">
-            <span class="text-gray-400">${p.obs||'Entrada'}</span>
-            <div class="flex items-center gap-2"><span class="text-yellow-300 font-medium">${Utils.currency(p.valor)}</span>${Utils.statusBadge(p.status)}</div>
-          </div>`).join('')}
-          <div class="mb-3"></div>` : ''}
-          ${mensais.length ? `
-          <p class="text-xs text-gray-400 mb-2">📅 Parcelas mensais:</p>
-          <div class="space-y-1">
-            ${mensais.map(p=>`
-            <div class="flex items-center justify-between py-1.5 border-b border-gray-700/30 last:border-0 text-sm">
-              <div>
-                <span class="text-gray-300">Parcela ${p.numero}/${p.total}</span>
-                <span class="text-gray-500 ml-2 text-xs">Venc: ${Utils.formatDate(p.vencimento)}</span>
-              </div>
-              <div class="flex items-center gap-2">
-                <span class="font-medium text-white">${Utils.currency(p.valor)}</span>
-                ${Utils.statusBadge(p.status)}
-              </div>
-            </div>`).join('')}
-          </div>` : ''}
+          <p class="section-title">💳 Plano de Pagamento</p>
+          ${(()=>{
+            const FLABEL = { pix:'Pix', dinheiro:'Dinheiro', cartao_debito:'Cartão Débito', cartao_credito:'Cartão Crédito', boleto:'Boleto' };
+            const FICON  = { pix:'🟢', dinheiro:'💵', cartao_debito:'🔵', cartao_credito:'🟣', boleto:'🟡' };
+
+            /* ── Linha de parcela individual ── */
+            const _pRow = (p, isEntrada=false) => {
+              const borda = p.status==='pago'?'border-l-green-500':p.status==='atrasado'?'border-l-red-500':'border-l-yellow-500';
+              const label = isEntrada
+                ? (p.obs || `Entrada — ${FLABEL[p.formaPagamento]||p.formaPagamento||'—'}`)
+                : `Parcela ${p.numero}/${p.total}`;
+              return `<div class="flex items-start justify-between bg-gray-700/20 rounded-lg px-3 py-2 border-l-2 ${borda} text-sm gap-2">
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <span class="font-medium ${isEntrada?'text-yellow-200':'text-gray-200'}">${label}</span>
+                    <span class="text-xs px-1.5 py-0.5 rounded bg-gray-600/60 text-gray-400">${FLABEL[p.formaPagamento]||p.formaPagamento||'—'}</span>
+                  </div>
+                  <div class="flex items-center gap-3 mt-0.5 text-xs flex-wrap">
+                    <span class="text-gray-500">📅 Venc: <span class="${p.status==='atrasado'?'text-red-400 font-semibold':'text-gray-400'}">${Utils.formatDate(p.vencimento)}</span></span>
+                    ${p.dataPagamento?`<span class="text-green-400">✅ Pago em: ${Utils.formatDate(p.dataPagamento)}</span>`:''}
+                    ${(p.juros||0)>0?`<span class="text-red-400">+${Utils.currency(p.juros)} juros</span>`:''}
+                  </div>
+                </div>
+                <div class="flex items-center gap-2 flex-shrink-0">
+                  <span class="font-bold text-white">${Utils.currency(p.valor+(p.juros||0))}</span>
+                  ${Utils.statusBadge(p.status)}
+                </div>
+              </div>`;
+            };
+
+            let html = '';
+
+            /* ── 💵 Ato / Entrada ── */
+            if (entradas.length) {
+              const totalEnt  = entradas.reduce((a,p)=>a+p.valor,0);
+              const pagoEnt   = entradas.filter(p=>p.status==='pago').reduce((a,p)=>a+p.valor,0);
+              const formasEnt = [...new Set(entradas.map(p=>p.formaPagamento))];
+              html += `<div class="mb-4">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-xs font-semibold text-yellow-300 uppercase tracking-wide">💵 Ato / Entrada</span>
+                  <span class="text-xs text-gray-500">${formasEnt.map(f=>`${FLABEL[f]||f}`).join(' + ')} · ${Utils.currency(totalEnt)} · ${Utils.currency(pagoEnt)} pago</span>
+                </div>
+                <div class="space-y-1.5">${entradas.map(p=>_pRow(p,true)).join('')}</div>
+              </div>`;
+            }
+
+            /* ── 📅 Restante — agrupado por forma de pagamento ── */
+            if (mensais.length) {
+              const totalMens = mensais.reduce((a,p)=>a+p.valor,0);
+              const pagoMens  = mensais.filter(p=>p.status==='pago').reduce((a,p)=>a+p.valor,0);
+              const formasMens= [...new Set(mensais.map(p=>p.formaPagamento))];
+
+              html += `<div>
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-xs font-semibold text-blue-300 uppercase tracking-wide">📅 Parcelamento do Restante</span>
+                  <span class="text-xs text-gray-500">${mensais.filter(p=>p.status==='pago').length}/${mensais.length} pagas · ${Utils.currency(pagoMens)} de ${Utils.currency(totalMens)}</span>
+                </div>`;
+
+              if (formasMens.length > 1) {
+                /* Múltiplas formas → cada uma vira um bloco com cabeçalho */
+                formasMens.forEach(forma => {
+                  const grupo     = mensais.filter(p=>p.formaPagamento===forma);
+                  const totG      = grupo.reduce((a,p)=>a+p.valor,0);
+                  const pagoG     = grupo.filter(p=>p.status==='pago').reduce((a,p)=>a+p.valor,0);
+                  const nParcG    = grupo.length;
+                  const valorMed  = nParcG>0 ? totG/nParcG : 0;
+                  html += `<div class="mb-3">
+                    <div class="flex items-center gap-2 mb-1.5 px-1">
+                      <span class="text-base">${FICON[forma]||'💳'}</span>
+                      <span class="text-sm font-semibold text-white">${FLABEL[forma]||forma}</span>
+                      <span class="text-xs text-gray-400">— ${nParcG}x de ${Utils.currency(valorMed)}</span>
+                      <span class="ml-auto text-xs text-gray-500">${grupo.filter(p=>p.status==='pago').length}/${nParcG} pagas · ${Utils.currency(pagoG)} de ${Utils.currency(totG)}</span>
+                    </div>
+                    <div class="space-y-1.5 pl-2 border-l-2 border-blue-800/40">
+                      ${grupo.map(p=>_pRow(p,false)).join('')}
+                    </div>
+                  </div>`;
+                });
+              } else {
+                /* Forma única → cabeçalho simples + lista */
+                const forma    = formasMens[0];
+                const valorMed = mensais.length>0 ? totalMens/mensais.length : 0;
+                html += `<div class="flex items-center gap-2 mb-2 px-1">
+                  <span class="text-base">${FICON[forma]||'💳'}</span>
+                  <span class="text-sm font-semibold text-white">${FLABEL[forma]||forma||'—'}</span>
+                  <span class="text-xs text-gray-400">— ${mensais.length}x de ${Utils.currency(valorMed)}</span>
+                </div>
+                <div class="space-y-1.5">${mensais.map(p=>_pRow(p,false)).join('')}</div>`;
+              }
+              html += `</div>`;
+            }
+
+            return html || '<p class="text-gray-500 text-sm">Nenhum registro financeiro</p>';
+          })()}
         </div>
 
         ${s.responsavel?`
