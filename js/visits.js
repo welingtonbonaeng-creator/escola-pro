@@ -251,17 +251,6 @@ const VisitsModule = (() => {
           </div>
         </div>
 
-        <!-- Horários Disponíveis -->
-        <div class="mb-5">
-          <button onclick="VisitsModule.toggleHorarios()" class="section-title mb-0 flex items-center gap-2 w-full text-left hover:text-white transition-colors">
-            <span>🗓️ Horários Disponíveis na Semana</span>
-            <span id="horariosToggleIcon" class="text-gray-500 text-xs ml-auto">▼ ver</span>
-          </button>
-          <div id="horariosDisp" class="hidden mt-3 card card-sm bg-gray-800/40">
-            ${typeof ScheduleModule !== 'undefined' ? ScheduleModule.renderMiniDisponivel() : '<p class="text-gray-500 text-xs">Módulo de agenda não carregado.</p>'}
-          </div>
-        </div>
-
         <!-- Observações -->
         <div>
           <p class="section-title mb-2">📝 Observações (${(v.observacoes||[]).length})</p>
@@ -292,14 +281,6 @@ const VisitsModule = (() => {
       </div>`);
 
     setTimeout(() => { const el = document.getElementById('obsInput'); if (el) el.focus(); }, 80);
-  }
-
-  function toggleHorarios() {
-    const el   = document.getElementById('horariosDisp');
-    const icon = document.getElementById('horariosToggleIcon');
-    if (!el) return;
-    const hidden = el.classList.toggle('hidden');
-    if (icon) icon.textContent = hidden ? '▼ ver' : '▲ ocultar';
   }
 
   function setTemperatura(id, temp) {
@@ -457,18 +438,6 @@ const VisitsModule = (() => {
                 <input name="geradorNome" class="input-field" placeholder="Nome de quem captou este lead"
                   value="${v?.geradorNome || ''}">
               </div>
-            </div>
-          </div>
-
-          <!-- Horários Disponíveis -->
-          <div class="bg-gray-800/40 border border-gray-700/30 rounded-xl p-4">
-            <button type="button" onclick="VisitsModule.toggleHorarios()"
-              class="flex items-center justify-between w-full text-sm font-semibold text-gray-300 hover:text-white transition-colors">
-              <span>🗓️ Ver Horários Disponíveis na Semana</span>
-              <span id="horariosToggleIcon" class="text-gray-500 text-xs">▼ ver</span>
-            </button>
-            <div id="horariosDisp" class="hidden mt-3">
-              ${typeof ScheduleModule !== 'undefined' ? ScheduleModule.renderMiniDisponivel() : '<p class="text-gray-500 text-xs">Carregando…</p>'}
             </div>
           </div>
 
@@ -728,7 +697,6 @@ const VisitsModule = (() => {
   return {
     render, openForm, save, remove, convertToStudent, confirmCreateLogin,
     search, onBirthChange, toggleResp, buscarCEP,
-    setFilter, clearFilters, openDetail, setTemperatura, addObservacao, removeObservacao, exportWord,
-    toggleHorarios
+    setFilter, clearFilters, openDetail, setTemperatura, addObservacao, removeObservacao, exportWord
   };
 })();

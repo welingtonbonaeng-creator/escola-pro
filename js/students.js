@@ -11,6 +11,75 @@ const StudentsModule = (() => {
   /* Parser monetário BR — aceita vírgula e ponto */
   function _parseBRL(v) { return Utils.parseBRL(v); }
 
+  /* Máquinas da sala (espelha ScheduleModule.MAQUINAS) */
+  const _MAQUINAS = typeof ScheduleModule !== 'undefined' ? ScheduleModule.MAQUINAS :
+    [...Array(12).keys()].map((_,i)=>`COMPUTADOR ${String(i+1).padStart(2,'0')}`).concat(['EXCLUSIVIDADE AV1','EXCLUSIVIDADE AV2']);
+
+  const _SLOT_DIAS     = [{key:'seg',lbl:'Seg'},{key:'ter',lbl:'Ter'},{key:'qua',lbl:'Qua'},{key:'qui',lbl:'Qui'},{key:'sex',lbl:'Sex'},{key:'sab',lbl:'Sáb'}];
+  const _SLOT_HORARIOS = ['08:00-09:30','09:30-11:00','11:00-12:30','13:00-14:30','14:30-16:00','16:00-17:30'];
+  const _DIAS_FULL     = {seg:'Segunda',ter:'Terça',qua:'Quarta',qui:'Quinta',sex:'Sexta',sab:'Sábado'};
+
+  /* Grade de horários — retorna HTML da grade de seleção */
+  function _renderSlotSelector() {
+    const schedule = DB.get('schedule');
+    const TOTAL = _MAQUINAS.length;
+
+    let html = `<div class="overflow-x-auto -mx-1">
+      <table class="w-full text-xs">
+        <thead><tr>
+          <th class="text-left text-gray-500 py-1 pr-3 font-normal whitespace-nowrap">Horário</th>
+          ${_SLOT_DIAS.map(d=>`<th class="text-center text-gray-400 font-semibold py-1 px-1 min-w-[60px]">${d.lbl}</th>`).join('')}
+        </tr></thead>
+        <tbody>
+          ${_SLOT_HORARIOS.map(hor => `<tr>
+            <td class="text-gray-500 pr-2 py-0.5 whitespace-nowrap">${hor}</td>
+            ${_SLOT_DIAS.map(dia => {
+              const occ  = schedule.filter(s=>s.dia===dia.key&&s.horario===hor&&s.alunoId!==_mat.editId).length;
+              const free = Math.max(0, TOTAL - occ);
+              const sel  = _mat.slots.some(s=>s.dia===dia.key&&s.horario===hor);
+              let cls, txt;
+              if (sel)          { cls='bg-primary-600 border-primary-500 text-white font-bold';          txt='✓'; }
+              else if (free===0){ cls='bg-gray-700/20 border-gray-600/20 text-gray-700 cursor-not-allowed'; txt='Lotado'; }
+              else if (free<=3) { cls='bg-red-900/30 border-red-700/30 text-red-400 hover:bg-red-800/40';   txt=free+''; }
+              else if (free<=7) { cls='bg-yellow-900/30 border-yellow-700/30 text-yellow-300 hover:bg-yellow-800/40'; txt=free+''; }
+              else              { cls='bg-green-900/30 border-green-700/30 text-green-400 hover:bg-green-800/40';     txt=free+''; }
+              return `<td class="px-0.5 py-0.5">
+                <button type="button" title="${free} vaga(s) livre(s)"
+                  ${free>0||sel ? `onclick="StudentsModule.toggleSlot('${dia.key}','${hor}')"` : 'disabled'}
+                  class="w-full rounded border py-2 text-xs transition-colors font-medium ${cls}">
+                  ${txt}
+                </button></td>`;
+            }).join('')}
+          </tr>`).join('')}
+        </tbody>
+      </table>
+    </div>
+    <div class="flex flex-wrap gap-3 mt-2 text-xs text-gray-600">
+      <span>🟢 >7 vagas</span><span>🟡 1–7 vagas</span><span>🔴 Lotado</span><span class="text-primary-400">■ Selecionado</span>
+    </div>`;
+
+    if (_mat.slots.length > 0) {
+      html += `<div class="mt-3 flex flex-wrap gap-2">
+        ${_mat.slots.map(s=>`
+          <span class="inline-flex items-center gap-1 bg-primary-900/50 text-primary-200 text-xs px-2.5 py-1.5 rounded-full border border-primary-700/40">
+            📅 ${_DIAS_FULL[s.dia]||s.dia} · ${s.horario}
+            <button type="button" onclick="StudentsModule.toggleSlot('${s.dia}','${s.horario}')" class="ml-1 text-primary-400 hover:text-white leading-none">×</button>
+          </span>`).join('')}
+      </div>`;
+    } else {
+      html += `<p class="text-xs text-gray-600 mt-2 italic">Nenhum horário selecionado — clique nas células disponíveis acima.</p>`;
+    }
+    return html;
+  }
+
+  function toggleSlot(dia, horario) {
+    const idx = _mat.slots.findIndex(s=>s.dia===dia&&s.horario===horario);
+    if (idx >= 0) _mat.slots.splice(idx, 1);
+    else _mat.slots.push({ dia, horario });
+    const el = document.getElementById('matSlotGrid');
+    if (el) el.innerHTML = _renderSlotSelector();
+  }
+
   /* Cálculo financeiro */
   function _calc() {
     const totalCursos  = _mat.cursos.reduce((s, c) => s + c.valor, 0);
@@ -106,6 +175,10 @@ const StudentsModule = (() => {
             </div>`;}).join('');
       }
     }
+
+    /* Grade de horários */
+    const slotEl = document.getElementById('matSlotGrid');
+    if (slotEl) slotEl.innerHTML = _renderSlotSelector();
 
     /* Bloco parcelas */
     const parcEl = document.getElementById('matParcelasBox');
@@ -245,6 +318,7 @@ const StudentsModule = (() => {
     const faltas    = freq.filter(f=>!f.presente).length;
     const entradas  = parcelas.filter(p=>p.tipo==='entrada');
     const mensais   = parcelas.filter(p=>p.tipo!=='entrada');
+    const schedSlots = DB.get('schedule').filter(s=>s.alunoId===id);
 
     Utils.showModal(`
       <div class="p-6 space-y-5">
@@ -292,6 +366,21 @@ const StudentsModule = (() => {
             ${mat.totalParcelas>0&&(mat.valorFinal||mat.valorTotal)>mat.totalEntrada?`<div class="stat-row"><span class="text-gray-400">Parcelas</span><span class="text-white">${mat.totalParcelas}x de ${Utils.currency(mat.valorParcela)}</span></div>`:''}
           </div>
         </div>` : '<p class="text-gray-500 text-sm">Sem matrícula ativa</p>'}
+
+        <!-- Horários de Estudo -->
+        <div>
+          <p class="section-title">📅 Horários de Estudo</p>
+          ${schedSlots.length ? `
+          <div class="flex flex-wrap gap-2">
+            ${schedSlots.map(s=>{
+              const maq = s.maquina||'';
+              const diaLabel = {seg:'Segunda',ter:'Terça',qua:'Quarta',qui:'Quinta',sex:'Sexta',sab:'Sábado'}[s.dia]||s.dia;
+              return `<span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-primary-900/40 border border-primary-700/40 text-xs text-primary-200">
+                📅 ${diaLabel} · ${s.horario}${maq?` <span class="text-gray-500">· ${maq}</span>`:''}
+              </span>`;
+            }).join('')}
+          </div>` : '<p class="text-gray-500 text-sm">Nenhum horário definido</p>'}
+        </div>
 
         <!-- Frequência -->
         <div>
@@ -364,7 +453,9 @@ const StudentsModule = (() => {
       extraDesc:    mat?.desconto    || 0,
       entrada:      mat?.entrada     || [],
       nParcelas:    mat?.totalParcelas || 1,
-      formaParcela: mat?.formasPagamento?.find(f=>f.tipo!=='entrada')?.tipo || 'pix'
+      formaParcela: mat?.formasPagamento?.find(f=>f.tipo!=='entrada')?.tipo || 'pix',
+      slots:        id ? DB.get('schedule').filter(s=>s.alunoId===id).map(s=>({dia:s.dia,horario:s.horario})) : [],
+      editId:       id || null
     };
 
     const cursosOpts = cursos.map(c =>
@@ -379,7 +470,7 @@ const StudentsModule = (() => {
       `<option value="${e.id}" ${mat?.funcionarioId===e.id?'selected':''}>${e.nome}</option>`
     ).join('');
 
-    const parcelasOpts = [1,2,3,4,5,6,8,10,12].map(n =>
+    const parcelasOpts = [1,2,3,4,5,6,8,10,12,15,18,24,36].map(n =>
       `<option value="${n}" ${_mat.nParcelas===n?'selected':''}>${n}x</option>`
     ).join('');
 
@@ -468,6 +559,13 @@ const StudentsModule = (() => {
                 </select>
               </div>
             </div>
+          </div>
+
+          <!-- Horários de Estudo -->
+          <div>
+            <p class="section-title">📅 Horários de Estudo</p>
+            <p class="text-xs text-gray-400 mb-3">Selecione os dias e horários que o aluno irá estudar. O número indica vagas disponíveis na sala.</p>
+            <div id="matSlotGrid" class="bg-gray-800/40 rounded-xl p-3 border border-gray-700/30"></div>
           </div>
 
           <!-- Financeiro -->
@@ -578,6 +676,7 @@ const StudentsModule = (() => {
         ..._mat.entrada.map(en => ({ tipo: en.tipo, valor: en.valor })),
         ...(c.restante > 0 ? [{ tipo: _mat.formaParcela, valor: c.restante }] : [])
       ],
+      slots: _mat.slots.map(s => ({ dia: s.dia, horario: s.horario })),
       createdAt: matOld.createdAt || new Date().toISOString()
     };
 
@@ -591,6 +690,19 @@ const StudentsModule = (() => {
       criadoPor: old?.criadoPor || Auth.currentUser?.id
     };
     const saved = DB.save('students', rec);
+
+    /* Atualiza grade de horários — remove slots desmarcados, cria novos */
+    const _oldSchedSlots = DB.get('schedule').filter(s => s.alunoId === saved.id);
+    _oldSchedSlots.forEach(s => {
+      if (!_mat.slots.some(sl => sl.dia===s.dia && sl.horario===s.horario)) DB.remove('schedule', s.id);
+    });
+    _mat.slots.forEach(slot => {
+      if (!_oldSchedSlots.find(s => s.dia===slot.dia && s.horario===slot.horario)) {
+        const taken = DB.get('schedule').filter(s => s.dia===slot.dia && s.horario===slot.horario).map(s=>s.maquina);
+        const machine = _MAQUINAS.find(m => !taken.includes(m)) || _MAQUINAS[0];
+        DB.save('schedule', { dia:slot.dia, horario:slot.horario, maquina:machine, alunoId:saved.id, nomeAluno:saved.nome, tipo:'aluno', createdAt:new Date().toISOString(), updatedAt:new Date().toISOString() });
+      }
+    });
 
     /* Gerar registros financeiros (apenas em nova matrícula) */
     if (!id) {
@@ -680,6 +792,6 @@ const StudentsModule = (() => {
     render, setFilter, openForm, openDetail, save, remove, search,
     addCurso, removeCurso, setComboDesc, setExtraDesc, setCursoValor, formatCursoValor,
     addEntrada, removeEntrada, setEntradaValor, formatEntradaValor, setEntradaParcelas,
-    setNParcelas, setFormaParcela
+    setNParcelas, setFormaParcela, toggleSlot
   };
 })();
