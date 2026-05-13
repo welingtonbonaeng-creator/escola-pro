@@ -2,6 +2,7 @@
 const App = {
   currentModule: 'dashboard',
   _sidebarCollapsed: false,
+  _badgeInterval: null,
 
   init() {
     Auth.init();
@@ -233,7 +234,25 @@ const App = {
 
     const mods = ['dashboard','visits','courses','students','employees','attendance','financial'];
     const first = mods.find(m => Auth.can(this._permKey(m),'ver')) || 'dashboard';
+
+    /* Inicia polling de badges a cada 5 s */
+    if (this._badgeInterval) clearInterval(this._badgeInterval);
+    this._badgeInterval = setInterval(() => this.updateBadges(), 5000);
+
     this.navigate(first);
+  },
+
+  updateBadges() {
+    if (!Auth.logged) return;
+    const _setBadge = (id, count) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const n = Math.min(count, 99);
+      el.textContent = n || '';
+      el.style.display = n > 0 ? 'inline-flex' : 'none';
+    };
+    _setBadge('badge-staffchat', typeof StaffChatModule !== 'undefined' ? StaffChatModule.totalUnread() : 0);
+    _setBadge('badge-chat',      typeof ChatModule      !== 'undefined' ? ChatModule.getUnreadCount()   : 0);
   },
 
   /* Mapeia nome do módulo (nav/inglês) para chave de permissão (português) */
@@ -280,6 +299,8 @@ const App = {
       staffchat:     () => StaffChatModule.render(),
     };
     if (map[module]) map[module]();
+    /* Atualiza badges imediatamente após cada navegação */
+    setTimeout(() => this.updateBadges(), 80);
   },
 
   denied() {
@@ -292,6 +313,7 @@ const App = {
   },
 
   logout() {
+    if (this._badgeInterval) { clearInterval(this._badgeInterval); this._badgeInterval = null; }
     Auth.logout();
     document.getElementById('appScreen').classList.add('hidden');
     document.getElementById('sidebar').style.display = '';
