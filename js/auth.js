@@ -70,9 +70,10 @@ const Auth = {
     return this.currentUser.permissoes?.[module]?.[action] === true;
   },
 
-  get logged()    { return !!this.currentUser; },
-  get isAdmin()   { return this.currentUser?.isAdmin === true; },
-  get isMaster()  { return this.currentUser?.id === 'emp_master'; },
+  get logged()      { return !!this.currentUser; },
+  get isAdmin()     { return this.currentUser?.isAdmin === true; },
+  get isMaster()    { return this.currentUser?.id === 'emp_master'; },
+  get isEmployee()  { return this.logged && !this.isMaster && !this.isAdmin; },
 
   /* Lê/grava configuração do sistema (localStorage + Supabase) */
   getSetting(key) {

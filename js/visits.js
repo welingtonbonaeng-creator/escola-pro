@@ -25,7 +25,11 @@ const VisitsModule = (() => {
   let _filters = { q:'', temp:'', de:'', ate:'' };
 
   /* ── helpers ── */
-  function _getAll()     { return DB.get('visits').filter(v => v.status === 'visita'); }
+  function _getAll() {
+    const all = DB.get('visits').filter(v => v.status === 'visita');
+    if (Auth.isEmployee) return all.filter(v => v.vendedorId === Auth.currentUser?.id);
+    return all;
+  }
   function _getFiltered() {
     let list = _getAll();
     const { q, temp, de, ate } = _filters;
@@ -428,10 +432,15 @@ const VisitsModule = (() => {
               </div>
               <div>
                 <label class="form-label">Atendente / Vendedor</label>
-                <select name="vendedorId" class="input-field">
-                  <option value="">— Selecione —</option>
-                  ${employees.map(e => `<option value="${e.id}" ${v?.vendedorId === e.id ? 'selected' : ''}>${e.nome}</option>`).join('')}
-                </select>
+                ${Auth.isEmployee ? `
+                  <input type="hidden" name="vendedorId" value="${Auth.currentUser?.id || ''}">
+                  <div class="input-field bg-gray-700/50 text-gray-300 cursor-default">${Auth.currentUser?.nome || '—'} <span class="text-gray-500 text-xs">(você)</span></div>
+                ` : `
+                  <select name="vendedorId" class="input-field">
+                    <option value="">— Selecione —</option>
+                    ${employees.map(e => `<option value="${e.id}" ${v?.vendedorId === e.id ? 'selected' : ''}>${e.nome}</option>`).join('')}
+                  </select>
+                `}
               </div>
               <div class="sm:col-span-2">
                 <label class="form-label">Gerador / Captador do Lead</label>
@@ -595,7 +604,7 @@ const VisitsModule = (() => {
       telefone:d.telefone, email:d.email, responsavel,
       temperatura:  d.temperatura || null,
       origem:       d.origem       || null,
-      vendedorId:   d.vendedorId   || null,
+      vendedorId:   Auth.isEmployee ? Auth.currentUser.id : (d.vendedorId || null),
       geradorNome:  d.geradorNome  || null,
       observacoes:  old?.observacoes || [],
       status:       'visita',

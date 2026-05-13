@@ -55,11 +55,15 @@ const PerformanceModule = (() => {
   /* ── RENDER ── */
   function render() {
     if (!Auth.can('financeiro','ver') && !Auth.can('alunos','ver')) { App.denied(); return; }
+
+    /* Funcionários não-admin só acessam suas próprias abas */
+    if (Auth.isEmployee && activeTab === 'geral') activeTab = 'comercial';
+
     const range = _getRange();
 
     document.getElementById('mainContent').innerHTML = `
       <div class="space-y-4">
-        <h3 class="text-xl font-bold text-white">📊 Desempenho</h3>
+        <h3 class="text-xl font-bold text-white">📊 Desempenho${Auth.isEmployee ? ' — ' + (Auth.currentUser?.nome || '') : ''}</h3>
 
         <!-- Filtro de período -->
         <div class="flex flex-wrap gap-2 items-center">
@@ -75,9 +79,9 @@ const PerformanceModule = (() => {
 
         <!-- Sub-tabs -->
         <div class="tab-bar">
-          <button class="tab-btn ${activeTab==='geral'?'active':''}"     onclick="PerformanceModule.setTab('geral')">🏫 Geral</button>
-          <button class="tab-btn ${activeTab==='comercial'?'active':''}" onclick="PerformanceModule.setTab('comercial')">🤝 Comercial</button>
-          <button class="tab-btn ${activeTab==='metas'?'active':''}"     onclick="PerformanceModule.setTab('metas')">🎯 Metas</button>
+          ${!Auth.isEmployee ? `<button class="tab-btn ${activeTab==='geral'?'active':''}" onclick="PerformanceModule.setTab('geral')">🏫 Geral</button>` : ''}
+          <button class="tab-btn ${activeTab==='comercial'?'active':''}" onclick="PerformanceModule.setTab('comercial')">🤝 ${Auth.isEmployee ? 'Minhas Vendas' : 'Comercial'}</button>
+          <button class="tab-btn ${activeTab==='metas'?'active':''}"     onclick="PerformanceModule.setTab('metas')">🎯 ${Auth.isEmployee ? 'Minhas Metas' : 'Metas'}</button>
         </div>
 
         <div id="perfContent">
@@ -256,14 +260,20 @@ const PerformanceModule = (() => {
   function _renderComercial(range) {
     const visits    = DB.get('visits');
     const students  = DB.get('students');
-    const employees = DB.get('employees').filter(e=>e.ativo!==false);
     const mes       = _currentMes();
+    const empId     = Auth.currentUser?.id;
+    const isEmp     = Auth.isEmployee;
 
-    /* Todos os leads cadastrados no período */
-    const leadsRange = visits.filter(v => _inRange(v.createdAt, range));
+    /* Para funcionários não-admin, filtra apenas os próprios leads */
+    const allEmployees = DB.get('employees').filter(e=>e.ativo!==false);
+    const employees    = isEmp ? allEmployees.filter(e=>e.id===empId) : allEmployees;
 
-    /* Convertidos no período (visitaId → student) */
-    const convertidosRange = visits.filter(v => v.status==='aluno' && _inRange(v.convertidoEm||v.createdAt, range));
+    const leadsRange = visits.filter(v =>
+      _inRange(v.createdAt, range) && (!isEmp || v.vendedorId === empId)
+    );
+    const convertidosRange = visits.filter(v =>
+      v.status==='aluno' && _inRange(v.convertidoEm||v.createdAt, range) && (!isEmp || v.vendedorId === empId)
+    );
 
     const totalLeads = leadsRange.length;
     const totalConv  = convertidosRange.length;
@@ -345,7 +355,7 @@ const PerformanceModule = (() => {
 
       <!-- Por Vendedor / Atendente -->
       <div class="card mb-4">
-        <p class="font-semibold text-white mb-3">🏆 Desempenho por Vendedor/Atendente</p>
+        <p class="font-semibold text-white mb-3">🏆 ${isEmp ? 'Meu Desempenho' : 'Desempenho por Vendedor/Atendente'}</p>
         ${empRows.length === 0 ? `<p class="text-gray-500 text-sm text-center py-4">Nenhum dado no período.<br><span class="text-xs">Certifique-se de vincular visitas e matrículas aos funcionários.</span></p>` : `
         <div class="overflow-x-auto">
           <table class="w-full text-sm">
@@ -421,11 +431,66 @@ const PerformanceModule = (() => {
 
   /* ══════════════ METAS ══════════════ */
   function _renderMetas() {
-    const mes      = _currentMes();
-    const d        = new Date();
-    const mesLabel = `${MESES[d.getMonth()]} ${d.getFullYear()}`;
-    const meta     = _metaEscola(mes);
-    const employees = DB.get('employees').filter(e=>e.ativo!==false);
+    const mes       = _currentMes();
+    const d         = new Date();
+    const mesLabel  = `${MESES[d.getMonth()]} ${d.getFullYear()}`;
+    const meta      = _metaEscola(mes);
+    const isEmp     = Auth.isEmployee;
+    const allEmployees = DB.get('employees').filter(e=>e.ativo!==false);
+    const employees = isEmp ? allEmployees.filter(e=>e.id===Auth.currentUser?.id) : allEmployees;
+
+    /* Funcionário não-admin vê apenas a própria meta (somente leitura) */
+    if (isEmp) {
+      const emp = employees[0];
+      if (!emp) return Utils.emptyState('Funcionário não encontrado');
+      const me = _metaFunc(emp.id, mes);
+      const matsMes = DB.get('students').filter(s=>s.matriculas?.[0]?.funcionarioId===emp.id&&s.matriculas[0].dataInicio?.startsWith(mes)).length;
+      const recMes  = DB.get('students').filter(s=>s.matriculas?.[0]?.funcionarioId===emp.id&&s.matriculas[0].dataInicio?.startsWith(mes))
+                        .reduce((a,s)=>a+(s.matriculas[0].valorFinal||s.matriculas[0].valorTotal||0),0);
+      const matPct  = me.metaMatriculas > 0 ? Math.min(100,Math.round((matsMes/me.metaMatriculas)*100)) : 0;
+      const recPct  = me.metaReceita   > 0 ? Math.min(100,Math.round((recMes/me.metaReceita)*100))   : 0;
+      return `
+        <div class="card">
+          <div class="flex items-center gap-3 mb-5">
+            <div class="w-10 h-10 rounded-full bg-primary-800 flex items-center justify-center font-bold text-primary-200">${Utils.initials(emp.nome)}</div>
+            <div>
+              <p class="font-semibold text-white">${emp.nome}</p>
+              <p class="text-xs text-gray-400">${emp.cargo||'Funcionário'} · ${mesLabel}</p>
+            </div>
+          </div>
+          ${me.metaMatriculas > 0 || me.metaReceita > 0 ? `
+          <div class="space-y-5">
+            ${me.metaMatriculas > 0 ? `
+            <div>
+              <div class="flex justify-between mb-1">
+                <span class="text-gray-300 text-sm font-medium">🎓 Matrículas</span>
+                <span class="text-xs ${matPct>=100?'text-green-400':'text-gray-400'}">${matsMes} / ${me.metaMatriculas}</span>
+              </div>
+              <div class="progress-bar h-4 mb-1"><div class="progress-fill ${matPct>=100?'bg-green-500':matPct>=70?'bg-yellow-500':'bg-red-500'}" style="width:${matPct}%"></div></div>
+              <div class="flex justify-between">
+                <span class="text-xs ${matPct>=100?'text-green-400':'text-gray-500'}">${matPct>=100?'✅ Meta atingida!':'Faltam '+(me.metaMatriculas-matsMes)+' matrículas'}</span>
+                <span class="text-white font-bold text-sm">${matPct}%</span>
+              </div>
+            </div>` : ''}
+            ${me.metaReceita > 0 ? `
+            <div>
+              <div class="flex justify-between mb-1">
+                <span class="text-gray-300 text-sm font-medium">💰 Receita</span>
+                <span class="text-xs ${recPct>=100?'text-green-400':'text-gray-400'}">${Utils.currency(recMes)} / ${Utils.currency(me.metaReceita)}</span>
+              </div>
+              <div class="progress-bar h-4 mb-1"><div class="progress-fill ${recPct>=100?'bg-green-500':recPct>=70?'bg-yellow-500':'bg-red-500'}" style="width:${recPct}%"></div></div>
+              <div class="flex justify-between">
+                <span class="text-xs ${recPct>=100?'text-green-400':'text-gray-500'}">${recPct>=100?'✅ Meta atingida!':'Faltam '+Utils.currency(me.metaReceita-recMes)}</span>
+                <span class="text-white font-bold text-sm">${recPct}%</span>
+              </div>
+            </div>` : ''}
+          </div>` : `
+          <div class="text-center py-6 border border-dashed border-gray-600 rounded-xl">
+            <p class="text-gray-500 text-sm">Nenhuma meta definida para este mês.</p>
+            <p class="text-xs text-gray-600 mt-1">Fale com o administrador para definir suas metas.</p>
+          </div>`}
+        </div>`;
+    }
 
     return `
       <!-- Meta Geral da Escola -->
@@ -458,9 +523,9 @@ const PerformanceModule = (() => {
       <!-- Metas por Funcionário -->
       <div class="card">
         <p class="font-semibold text-white mb-4">👥 Metas por Funcionário — ${mesLabel}</p>
-        ${!employees.length ? Utils.emptyState('Nenhum funcionário cadastrado') : `
+        ${!allEmployees.length ? Utils.emptyState('Nenhum funcionário cadastrado') : `
         <div class="space-y-3">
-          ${employees.map(emp => {
+          ${allEmployees.map(emp => {
             const me = _metaFunc(emp.id, mes);
             return `
             <div class="border border-gray-700/40 rounded-xl p-4">
