@@ -92,6 +92,46 @@ const DB = {
       } catch(e) { console.warn('[DB] load error', col, e); }
     }
     console.log('[EscolaPro] Dados sincronizados do Supabase ✅');
+    /* Reconstrói ep_schedule a partir dos slots dos alunos quando a tabela não existe no Supabase */
+    this._rebuildScheduleFromStudents();
+  },
+
+  /* Popula ep_schedule a partir de students[].matriculas[0].slots
+     Só cria entradas que ainda não existam (evita duplicatas) */
+  _rebuildScheduleFromStudents() {
+    const students  = this.get('students');
+    const existing  = this.get('schedule');
+    const existKeys = new Set(existing.map(s => `${s.alunoId}|${s.dia}|${s.horario}`));
+    const MAQUINAS  = [
+      'COMPUTADOR 01','COMPUTADOR 02','COMPUTADOR 03','COMPUTADOR 04',
+      'COMPUTADOR 05','COMPUTADOR 06','COMPUTADOR 07','COMPUTADOR 08',
+      'COMPUTADOR 09','COMPUTADOR 10','COMPUTADOR 11','COMPUTADOR 12',
+      'EXCLUSIVIDADE AV1','EXCLUSIVIDADE AV2',
+    ];
+    const novas = [];
+    students.forEach(s => {
+      const slots = s.matriculas?.[0]?.slots || [];
+      slots.forEach(slot => {
+        const key = `${s.id}|${slot.dia}|${slot.horario}`;
+        if (existKeys.has(key)) return;
+        /* Encontra máquina livre nesse slot */
+        const ocupadas = existing
+          .concat(novas)
+          .filter(r => r.dia === slot.dia && r.horario === slot.horario)
+          .map(r => r.maquina);
+        const maquina = MAQUINAS.find(m => !ocupadas.includes(m)) || MAQUINAS[0];
+        novas.push({
+          id: this._id(), dia: slot.dia, horario: slot.horario, maquina,
+          alunoId: s.id, nomeAluno: s.nome, tipo: 'aluno',
+          createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+        });
+        existKeys.add(key);
+      });
+    });
+    if (novas.length > 0) {
+      this.set('schedule', [...existing, ...novas]);
+      console.log(`[EscolaPro] ${novas.length} slot(s) de grade reconstruídos dos alunos`);
+    }
   },
 
   /* ── Supabase: exportar localStorage → Supabase (primeira vez) ── */
