@@ -112,99 +112,206 @@ const FinancialModule = (() => {
   function openDetail(id) {
     const s = DB.findById('students', id);
     if (!s) return;
-    const allParcelas = DB.get('financial').filter(p=>p.alunoId===id);
-    const entradas = allParcelas.filter(p=>p.tipo==='entrada').sort((a,b)=>a.numero-b.numero);
-    const mensais  = allParcelas.filter(p=>p.tipo!=='entrada').sort((a,b)=>a.numero-b.numero);
-    const mat = s.matriculas?.[0];
-    const curso = mat ? DB.findById('courses', mat.cursoId) : null;
-    const total = allParcelas.reduce((a,p)=>a+(p.valor+(p.juros||0)),0);
-    const pago  = allParcelas.filter(p=>p.status==='pago').reduce((a,p)=>a+p.valor,0);
-    const inadimplente = allParcelas.some(p=>p.status==='atrasado');
+    const allParcelas  = DB.get('financial').filter(p => p.alunoId === id);
+    const entradas     = allParcelas.filter(p => p.tipo === 'entrada').sort((a,b) => (a.numero||0)-(b.numero||0));
+    const mensais      = allParcelas.filter(p => p.tipo !== 'entrada').sort((a,b) => {
+      const fa = a.formaPagamento||'', fb = b.formaPagamento||'';
+      return fa !== fb ? fa.localeCompare(fb) : (a.numero||0)-(b.numero||0);
+    });
+    const mat    = s.matriculas?.[0];
+    const cursos = mat?.comboCursos?.length ? mat.comboCursos :
+      (mat?.cursoId ? [DB.findById('courses', mat.cursoId)].filter(Boolean) : []);
+    const turma  = mat ? DB.findById('grades',     mat.turmaId)      : null;
+    const func   = mat ? DB.findById('employees',  mat.funcionarioId): null;
 
-    const _parcelaRow = (p, labelFn) => `
-      <div class="flex items-center justify-between bg-gray-700/30 rounded-lg px-3 py-2 text-sm">
-        <div>
-          <span class="font-medium">${labelFn(p)}</span>
-          <span class="text-gray-500 ml-2 text-xs">Venc: ${Utils.formatDate(p.vencimento)}</span>
-        </div>
-        <div class="flex items-center gap-2 flex-wrap justify-end">
-          <span class="font-bold">${Utils.currency(p.valor)}</span>
-          ${p.juros>0?`<span class="text-red-400 text-xs">+${Utils.currency(p.juros)} juros</span>`:''}
-          ${Utils.statusBadge(p.status)}
-          ${p.status!=='pago' && Auth.can('financeiro','criar')?`
-          <button onclick="FinancialModule.registerPayment('${id}','${p.id}')" class="btn-success btn-sm">💰 Pagar</button>`:''}
-          ${p.dataPagamento?`<span class="text-xs text-gray-500">${Utils.formatDate(p.dataPagamento)}</span>`:''}
+    const totalContrato = mat?.valorFinal || mat?.valorTotal || 0;
+    const totalGeral    = allParcelas.reduce((a,p) => a + p.valor + (p.juros||0), 0);
+    const pago          = allParcelas.filter(p=>p.status==='pago').reduce((a,p)=>a+p.valor,0);
+    const pendente      = allParcelas.filter(p=>p.status==='pendente').reduce((a,p)=>a+p.valor,0);
+    const atrasado      = allParcelas.filter(p=>p.status==='atrasado').reduce((a,p)=>a+p.valor+(p.juros||0),0);
+    const inadimplente  = allParcelas.some(p=>p.status==='atrasado');
+    const progPct       = totalGeral > 0 ? Math.min(100, Math.round((pago/totalGeral)*100)) : 0;
+
+    const FLABEL = { pix:'Pix', dinheiro:'Dinheiro', cartao_debito:'Cartão Débito', cartao_credito:'Cartão Crédito', boleto:'Boleto' };
+
+    const _row = (p, isEntrada=false) => {
+      const borda = p.status==='pago' ? 'border-l-green-500' : p.status==='atrasado' ? 'border-l-red-500' : 'border-l-yellow-500';
+      return `
+      <div class="bg-gray-700/20 rounded-lg px-3 py-2.5 border-l-2 ${borda} text-sm">
+        <div class="flex items-start justify-between gap-2">
+          <div class="flex-1 min-w-0">
+            <div class="flex items-center gap-2 flex-wrap">
+              <span class="font-medium ${isEntrada?'text-yellow-200':'text-gray-200'}">
+                ${p.obs || (isEntrada ? 'Entrada' : `Parcela ${p.numero}/${p.total}`)}
+              </span>
+              <span class="text-xs px-1.5 py-0.5 rounded bg-gray-600/60 text-gray-400">${FLABEL[p.formaPagamento]||p.formaPagamento||'—'}</span>
+            </div>
+            <div class="flex items-center gap-3 mt-1 text-xs flex-wrap">
+              <span class="text-gray-500">📅 Venc: <span class="${p.status==='atrasado'?'text-red-400 font-semibold':'text-gray-400'}">${Utils.formatDate(p.vencimento)}</span></span>
+              ${p.dataPagamento?`<span class="text-green-400">✅ Pago em: ${Utils.formatDate(p.dataPagamento)}</span>`:''}
+              ${(p.juros||0)>0?`<span class="text-red-400">+ ${Utils.currency(p.juros)} juros</span>`:''}
+            </div>
+          </div>
+          <div class="flex flex-col items-end gap-1.5 flex-shrink-0">
+            <div class="flex items-center gap-2">
+              <span class="font-bold text-white">${Utils.currency(p.valor+(p.juros||0))}</span>
+              ${Utils.statusBadge(p.status)}
+            </div>
+            ${p.status!=='pago' && Auth.can('financeiro','criar')?
+              `<button onclick="FinancialModule.registerPayment('${id}','${p.id}')" class="btn-success btn-sm">💰 Pagar</button>`:''}
+          </div>
         </div>
       </div>`;
+    };
+
+    /* Agrupa parcelas do restante por forma de pagamento se houver múltiplas */
+    const formasUsadas = [...new Set(mensais.map(p=>p.formaPagamento))];
+    const mensaisHtml  = formasUsadas.length > 1
+      ? formasUsadas.map(forma => {
+          const grupo     = mensais.filter(p=>p.formaPagamento===forma);
+          const totG      = grupo.reduce((a,p)=>a+p.valor+(p.juros||0),0);
+          const pagoG     = grupo.filter(p=>p.status==='pago').reduce((a,p)=>a+p.valor,0);
+          const pagoCount = grupo.filter(p=>p.status==='pago').length;
+          return `
+          <div class="mb-4">
+            <div class="flex items-center justify-between mb-2 px-1">
+              <span class="text-xs font-semibold text-blue-300 uppercase tracking-wide">${FLABEL[forma]||forma} — ${grupo.length}x</span>
+              <span class="text-xs text-gray-500">${Utils.currency(totG)} total · ${Utils.currency(pagoG)} pago (${pagoCount}/${grupo.length})</span>
+            </div>
+            <div class="space-y-1.5 pl-2 border-l-2 border-blue-800/40">
+              ${grupo.map(p=>_row(p,false)).join('')}
+            </div>
+          </div>`;
+        }).join('')
+      : `<div class="space-y-1.5">${mensais.map(p=>_row(p,false)).join('')}</div>`;
+
+    /* Próximo vencimento em aberto */
+    const proxVenc = allParcelas
+      .filter(p=>p.status!=='pago')
+      .sort((a,b)=>(a.vencimento||'').localeCompare(b.vencimento||''))[0];
 
     Utils.showModal(`
       <div class="p-6 space-y-5">
-        <div class="flex items-center justify-between">
-          <h3 class="text-lg font-bold text-white">${s.nome}</h3>
-          <button onclick="Utils.closeModal()" class="text-gray-400 hover:text-white">✕</button>
+
+        <!-- Cabeçalho -->
+        <div class="flex items-start justify-between">
+          <div>
+            <h3 class="text-lg font-bold text-white">${s.nome}</h3>
+            <p class="text-xs text-gray-500 mt-0.5">${s.telefone ? Utils.formatPhone(s.telefone) : ''} ${s.email ? '· '+s.email : ''}</p>
+            <div class="flex items-center gap-2 mt-1.5 flex-wrap">
+              ${Utils.statusBadge(s.status)}
+              ${inadimplente?'<span class="badge badge-red">⚠️ Inadimplente</span>':''}
+            </div>
+          </div>
+          <button onclick="Utils.closeModal()" class="text-gray-400 hover:text-white text-lg flex-shrink-0">✕</button>
         </div>
 
-        <div class="card card-sm space-y-2 text-sm">
-          <div class="stat-row"><span class="text-gray-400">Curso</span><span class="text-white">${curso?.nome||'—'}</span></div>
-          <div class="stat-row"><span class="text-gray-400">Status</span>${Utils.statusBadge(s.status)}</div>
-          <div class="stat-row"><span class="text-gray-400">Valor Contrato</span><span class="text-white font-bold">${Utils.currency(mat?.valorFinal||mat?.valorTotal||0)}</span></div>
+        <!-- Resumo da Matrícula -->
+        <div class="card card-sm text-sm space-y-1.5">
+          <p class="section-title mb-2">📋 Matrícula</p>
+          ${cursos.length?`<div class="stat-row"><span class="text-gray-400">Curso(s)</span><span class="text-white text-right">${cursos.map(c=>c.nome||c).join(', ')}</span></div>`:''}
+          ${turma?`<div class="stat-row"><span class="text-gray-400">Turma</span><span class="text-white">${turma.nome}</span></div>`:''}
+          ${mat?.dataInicio?`<div class="stat-row"><span class="text-gray-400">Início</span><span class="text-white">${Utils.formatDate(mat.dataInicio)}</span></div>`:''}
+          ${func?`<div class="stat-row"><span class="text-gray-400">Atendente</span><span class="text-white">${func.nome}</span></div>`:''}
           ${(mat?.comboDesc||0)>0?`<div class="stat-row"><span class="text-gray-400">Desc. combo</span><span class="text-green-400">- ${Utils.currency(mat.comboDesc)}</span></div>`:''}
           ${(mat?.desconto||0)>0?`<div class="stat-row"><span class="text-gray-400">Desc. extra</span><span class="text-green-400">- ${Utils.currency(mat.desconto)}</span></div>`:''}
-          ${(mat?.totalEntrada||0)>0?`<div class="stat-row"><span class="text-gray-400">Entrada (ato)</span><span class="text-yellow-300">${Utils.currency(mat.totalEntrada)}</span></div>`:''}
-          <div class="stat-row border-t border-gray-600 pt-2"><span class="text-gray-400">Já Pago</span><span class="text-green-400 font-bold">${Utils.currency(pago)}</span></div>
-          <div class="stat-row"><span class="text-gray-400">Pendente</span><span class="${inadimplente?'text-red-400':'text-yellow-400'} font-bold">${Utils.currency(total-pago)}</span></div>
+          <div class="stat-row border-t border-gray-600 pt-2">
+            <span class="text-gray-400">Valor do Contrato</span>
+            <span class="text-primary-300 font-bold text-base">${Utils.currency(totalContrato)}</span>
+          </div>
+        </div>
+
+        <!-- Situação Financeira -->
+        <div class="card card-sm text-sm space-y-3">
+          <p class="section-title mb-1">💰 Situação Financeira</p>
+          <div>
+            <div class="flex justify-between text-xs mb-1.5">
+              <span class="text-gray-400">Progresso de pagamento</span>
+              <span class="font-bold ${progPct>=100?'text-green-400':'text-white'}">${progPct}%</span>
+            </div>
+            <div class="w-full bg-gray-700 rounded-full h-2.5">
+              <div class="h-2.5 rounded-full transition-all ${progPct>=100?'bg-green-500':inadimplente?'bg-red-500':'bg-primary-500'}"
+                style="width:${progPct}%"></div>
+            </div>
+          </div>
+          <div class="grid grid-cols-3 gap-2">
+            <div class="text-center bg-green-900/20 rounded-xl p-2.5">
+              <div class="text-green-400 font-bold">${Utils.currency(pago)}</div>
+              <div class="text-xs text-gray-500 mt-0.5">✅ Pago</div>
+            </div>
+            <div class="text-center bg-yellow-900/20 rounded-xl p-2.5">
+              <div class="text-yellow-400 font-bold">${Utils.currency(pendente)}</div>
+              <div class="text-xs text-gray-500 mt-0.5">⏳ Pendente</div>
+            </div>
+            <div class="text-center ${atrasado>0?'bg-red-900/20':'bg-gray-700/20'} rounded-xl p-2.5">
+              <div class="${atrasado>0?'text-red-400':'text-gray-600'} font-bold">${Utils.currency(atrasado)}</div>
+              <div class="text-xs text-gray-500 mt-0.5">🚨 Em Atraso</div>
+            </div>
+          </div>
+          ${proxVenc?`
+          <div class="stat-row border-t border-gray-600 pt-2">
+            <span class="text-gray-400">Próx. vencimento</span>
+            <span class="${proxVenc.status==='atrasado'?'text-red-400 font-semibold':'text-white'}">${Utils.formatDate(proxVenc.vencimento)} — ${Utils.currency(proxVenc.valor)}</span>
+          </div>`:''}
         </div>
 
         ${s.inadimplenciaSituacao?`
         <div>
-          <p class="section-title">Situação da Inadimplência</p>
+          <p class="section-title">⚠️ Situação da Inadimplência</p>
           <div class="flex items-center gap-3">
             <span class="badge badge-red">${_situacaoLabel(s.inadimplenciaSituacao)}</span>
             ${Auth.can('financeiro','editar')?`
             <select onchange="FinancialModule.updateSituacao('${id}',this.value)" class="input-field flex-1">
               <option value="">Selecione...</option>
-              <option value="parou_frequentar"     ${s.inadimplenciaSituacao==='parou_frequentar'?'selected':''}>Parou de frequentar</option>
-              <option value="nunca_frequentou"     ${s.inadimplenciaSituacao==='nunca_frequentou'?'selected':''}>Nunca frequentou</option>
-              <option value="nunca_pagou"          ${s.inadimplenciaSituacao==='nunca_pagou'?'selected':''}>Nunca pagou</option>
-              <option value="frequenta_nao_paga"   ${s.inadimplenciaSituacao==='frequenta_nao_paga'?'selected':''}>Frequenta e não paga</option>
-              <option value="spc"                  ${s.inadimplenciaSituacao==='spc'?'selected':''}>SPC</option>
+              <option value="parou_frequentar"   ${s.inadimplenciaSituacao==='parou_frequentar'?'selected':''}>Parou de frequentar</option>
+              <option value="nunca_frequentou"   ${s.inadimplenciaSituacao==='nunca_frequentou'?'selected':''}>Nunca frequentou</option>
+              <option value="nunca_pagou"        ${s.inadimplenciaSituacao==='nunca_pagou'?'selected':''}>Nunca pagou</option>
+              <option value="frequenta_nao_paga" ${s.inadimplenciaSituacao==='frequenta_nao_paga'?'selected':''}>Frequenta e não paga</option>
+              <option value="spc"                ${s.inadimplenciaSituacao==='spc'?'selected':''}>SPC</option>
             </select>`:''}
           </div>
         </div>`:''}
 
-        <!-- Financeiro: Entrada + Parcelas -->
+        <!-- Ato / Entrada -->
+        ${entradas.length?`
         <div>
-          <p class="section-title">Financeiro</p>
-          ${entradas.length ? `
-          <p class="text-xs text-yellow-400 mb-2">💵 Ato / Entrada:</p>
-          <div class="space-y-2 mb-4">
-            ${entradas.map(p=>_parcelaRow(p, p=>
-              `<span class="text-yellow-200">${p.obs||'Entrada'}</span>`
-            )).join('')}
-          </div>` : ''}
-          ${mensais.length ? `
-          <p class="text-xs text-blue-400 mb-2">📅 Parcelas mensais:</p>
-          <div class="space-y-2">
-            ${mensais.map(p=>_parcelaRow(p, p=>
-              `<span class="text-gray-300">Parcela ${p.numero}/${p.total}</span>`
-            )).join('')}
-          </div>` : ''}
-          ${!entradas.length && !mensais.length ? '<p class="text-gray-500 text-sm text-center py-4">Nenhum registro financeiro</p>' : ''}
-        </div>
-
-        ${s.responsavel?`
-        <div>
-          <p class="section-title">Responsável Financeiro</p>
-          <div class="card card-sm text-sm">
-            <p class="text-white font-medium">${s.responsavel.nome}</p>
-            <p class="text-gray-400">${Utils.formatPhone(s.responsavel.telefone)} · ${s.responsavel.email||'—'}</p>
-            <a href="https://wa.me/55${(s.responsavel.telefone||'').replace(/\D/g,'')}" target="_blank" class="text-green-400 text-xs mt-1 block">📱 WhatsApp Responsável</a>
+          <div class="flex items-center justify-between mb-2">
+            <p class="section-title mb-0">💵 Ato / Entrada</p>
+            <span class="text-xs text-gray-500">${entradas.length} registro(s) · ${Utils.currency(entradas.reduce((a,p)=>a+p.valor,0))}</span>
+          </div>
+          <div class="space-y-1.5">
+            ${entradas.map(p=>_row(p,true)).join('')}
           </div>
         </div>`:''}
 
+        <!-- Parcelas do Restante -->
+        ${mensais.length?`
+        <div>
+          <div class="flex items-center justify-between mb-2">
+            <p class="section-title mb-0">📅 Parcelas do Restante</p>
+            <span class="text-xs text-gray-500">${mensais.filter(p=>p.status==='pago').length}/${mensais.length} pagas · ${Utils.currency(mensais.reduce((a,p)=>a+p.valor,0))} total</span>
+          </div>
+          ${mensaisHtml}
+        </div>`:''}
+
+        ${!entradas.length&&!mensais.length?'<p class="text-gray-500 text-sm text-center py-4">Nenhum registro financeiro cadastrado</p>':''}
+
+        <!-- Contato -->
+        <div class="flex flex-col sm:flex-row gap-2">
+          ${s.telefone?`
+          <a href="https://wa.me/55${(s.telefone||'').replace(/\D/g,'')}" target="_blank"
+            class="btn-success flex-1 text-center text-sm py-2">📱 WhatsApp Aluno</a>`:''}
+          ${s.responsavel?.telefone?`
+          <a href="https://wa.me/55${(s.responsavel.telefone||'').replace(/\D/g,'')}" target="_blank"
+            class="btn-secondary flex-1 text-center text-sm py-2">📱 WhatsApp Responsável</a>`:''}
+        </div>
+
         <div class="flex justify-end gap-3">
           <button onclick="Utils.closeModal()" class="btn-secondary">Fechar</button>
-          ${inadimplente && Auth.can('financeiro','editar')?`<button onclick="FinancialModule.toggleBlock('${id}');Utils.closeModal()" class="btn-danger">${s.status==='bloqueado'?'🔓 Desbloquear':'🔒 Bloquear'}</button>`:''}
+          ${inadimplente && Auth.can('financeiro','editar')?`
+          <button onclick="FinancialModule.toggleBlock('${id}');Utils.closeModal()" class="btn-danger">
+            ${s.status==='bloqueado'?'🔓 Desbloquear':'🔒 Bloquear'}
+          </button>`:''}
         </div>
       </div>`);
   }
