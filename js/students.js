@@ -17,7 +17,8 @@ const StudentsModule = (() => {
     const comboDesc    = _mat.cursos.length > 1 ? (_mat.comboDesc || 0) : 0;
     const extraDesc    = _mat.extraDesc || 0;
     const valorFinal   = Math.max(0, totalCursos - comboDesc - extraDesc);
-    const totalEntrada = _mat.entrada.reduce((s, e) => s + (parseFloat(e.valor) || 0), 0);
+    /* _parseBRL aceita tanto número quanto string com vírgula ("32,80" → 32.8) */
+    const totalEntrada = _mat.entrada.reduce((s, e) => s + _parseBRL(e.valor), 0);
     const restante     = Math.max(0, valorFinal - totalEntrada);
     const nP           = Math.max(1, parseInt(_mat.nParcelas) || 1);
     const valorParcela = restante > 0 ? restante / nP : 0;
@@ -79,7 +80,7 @@ const StudentsModule = (() => {
               <div class="relative flex-1">
                 <span class="absolute left-3 top-2.5 text-gray-400 text-xs">R$</span>
                 <input type="text" inputmode="decimal" placeholder="0,00"
-                  value="${en.valor||''}" class="input-field pl-8 text-sm"
+                  value="${en.valor > 0 ? Number(en.valor).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2}) : ''}" class="input-field pl-8 text-sm"
                   oninput="StudentsModule.setEntradaValor(${i},this.value)"
                   onblur="StudentsModule.formatEntradaValor(${i},this)">
               </div>
@@ -585,7 +586,7 @@ const StudentsModule = (() => {
         if (en.valor > 0) {
           novas.push({
             id: DB._id(), alunoId: saved.id, matriculaId: matId,
-            numero: 0, total: c.nP, valor: parseFloat(en.valor.toFixed(2)),
+            numero: 0, total: c.nP, valor: parseFloat(_parseBRL(en.valor).toFixed(2)),
             vencimento: today, dataPagamento: today,
             status: 'pago', tipo: 'entrada',
             formaPagamento: en.tipo, juros: 0,
