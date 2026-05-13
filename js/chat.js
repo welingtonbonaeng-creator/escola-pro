@@ -20,13 +20,20 @@ const ChatModule = (() => {
 
     const totalUnread = sorted.reduce((n, x) => n + x.unread, 0);
 
+    const staffUnread = typeof StaffChatModule !== 'undefined' ? StaffChatModule.totalUnread() : 0;
+
     document.getElementById('mainContent').innerHTML = `
       <div class="space-y-4">
-        <div class="flex items-center justify-between">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <h3 class="text-xl font-bold text-white">💬 Chat com Alunos</h3>
             <p class="text-gray-400 text-sm">${totalUnread ? `<span class="text-red-400 font-semibold">${totalUnread} mensagem(ns) não lida(s)</span>` : 'Todas as mensagens lidas'}</p>
           </div>
+          ${(Auth.isAdmin||Auth.isMaster) ? `
+          <button onclick="App.navigate('staffchat')" class="btn-secondary flex items-center gap-2 self-start">
+            👔 Chat com Equipe
+            ${staffUnread > 0 ? `<span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-red-500 text-white text-xs font-bold">${staffUnread}</span>` : ''}
+          </button>` : ''}
         </div>
 
         ${!sorted.length ? Utils.emptyState('Nenhum aluno ativo encontrado') : `
