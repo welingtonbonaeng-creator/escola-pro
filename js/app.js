@@ -225,7 +225,7 @@ const App = {
 
     document.querySelectorAll('.nav-item').forEach(item => {
       const mod = item.dataset.module;
-      if (mod === 'chat') return;
+      if (mod === 'chat' || mod === 'myperformance') return; // sempre visível
       item.style.display = (mod && !Auth.can(this._permKey(mod),'ver')) ? 'none' : '';
     });
 
@@ -245,8 +245,11 @@ const App = {
   },
 
   navigate(module) {
-    const _checkMod = this._permKey(module);
-    if (!Auth.can(_checkMod,'ver')) { this.denied(); return; }
+    /* Meu Desempenho é acessível a qualquer funcionário logado */
+    if (module !== 'myperformance') {
+      const _checkMod = this._permKey(module);
+      if (!Auth.can(_checkMod,'ver')) { this.denied(); return; }
+    }
     this.currentModule = module;
     this.closeSidebar();
 
@@ -254,20 +257,21 @@ const App = {
       el.classList.toggle('active', el.dataset.module === module);
     });
 
-    const titles = { dashboard:'Dashboard', visits:'Visitas', courses:'Cursos & Grades', students:'Alunos', employees:'Funcionários', schedule:'Grade de Horário', attendance:'Frequência', financial:'Financeiro', chat:'Chat com Alunos', performance:'Desempenho' };
+    const titles = { dashboard:'Dashboard', visits:'Visitas', courses:'Cursos & Grades', students:'Alunos', employees:'Funcionários', schedule:'Grade de Horário', attendance:'Frequência', financial:'Financeiro', chat:'Chat com Alunos', performance:'Desempenho', myperformance:'Meu Desempenho' };
     document.getElementById('pageTitle').textContent = titles[module] || module;
 
     const map = {
-      dashboard:  () => DashboardModule.render(),
-      visits:     () => VisitsModule.render(),
-      courses:    () => CoursesModule.render(),
-      students:   () => StudentsModule.render(),
-      employees:  () => EmployeesModule.render(),
-      schedule:   () => ScheduleModule.render(),
-      attendance: () => AttendanceModule.render(),
-      financial:  () => FinancialModule.render(),
-      chat:       () => ChatModule.render(),
-      performance:() => PerformanceModule.render(),
+      dashboard:     () => DashboardModule.render(),
+      visits:        () => VisitsModule.render(),
+      courses:       () => CoursesModule.render(),
+      students:      () => StudentsModule.render(),
+      employees:     () => EmployeesModule.render(),
+      schedule:      () => ScheduleModule.render(),
+      attendance:    () => AttendanceModule.render(),
+      financial:     () => FinancialModule.render(),
+      chat:          () => ChatModule.render(),
+      performance:   () => PerformanceModule.render(),
+      myperformance: () => MyPerformanceModule.render(),
     };
     if (map[module]) map[module]();
   },
