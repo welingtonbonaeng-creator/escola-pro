@@ -716,14 +716,16 @@ const StudentsModule = (() => {
       createdAt: matOld.createdAt || new Date().toISOString()
     };
 
+    /* Busca o registro mais recente do DB para garantir que não usamos um `old` stale */
+    const freshOld = id ? DB.findById('students', id) : null;
     const rec = {
-      ...old,
-      id:        id||undefined,
+      ...(freshOld || old || {}),
+      id:        id || undefined,
       nome:      d.nome, dataNascimento: d.dataNascimento, sexo: d.sexo,
       tipoDoc:   d.tipoDoc, documento: d.documento,
       telefone:  d.telefone, email: d.email, status: d.status,
       matriculas: [mat],
-      criadoPor: old?.criadoPor || Auth.currentUser?.id
+      criadoPor: (freshOld || old)?.criadoPor || Auth.currentUser?.id
     };
     const saved = DB.save('students', rec);
 
@@ -740,8 +742,10 @@ const StudentsModule = (() => {
       }
     });
 
-    /* Gerar registros financeiros (apenas em nova matrícula) */
-    if (!id) {
+    /* Gerar registros financeiros se ainda não existem para esta matrícula
+       (cobre tanto aluno novo quanto aluno convertido de visita que ainda não tinha matrícula) */
+    const jaTemFinanceiro = DB.get('financial').some(p => p.matriculaId === matId);
+    if (!jaTemFinanceiro) {
       const today = new Date().toISOString().slice(0,10);
       const novas = [];
 

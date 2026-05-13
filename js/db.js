@@ -76,8 +76,18 @@ const DB = {
       try {
         const { data, error } = await _sb.from(_TABLE[col]).select('*').order('created_at');
         if (!error && data) {
-          const mapped = data.map(r => this._toCamel(r));
-          localStorage.setItem(this.prefix + col, JSON.stringify(mapped));
+          const supabaseRecords = data.map(r => this._toCamel(r));
+          /* Merge: mantém registros locais que ainda não chegaram ao Supabase
+             (evita apagar dados criados localmente se o sync falhou) */
+          const localRecords  = this.get(col);
+          const supabaseIds   = new Set(supabaseRecords.map(r => r.id));
+          const somenteLocais = localRecords.filter(r => r.id && !supabaseIds.has(r.id));
+          const merged = [...supabaseRecords, ...somenteLocais];
+          localStorage.setItem(this.prefix + col, JSON.stringify(merged));
+          /* Tenta sincronizar os registros locais que não estavam no Supabase */
+          if (somenteLocais.length > 0) {
+            somenteLocais.forEach(r => this._syncRecord(col, r));
+          }
         }
       } catch(e) { console.warn('[DB] load error', col, e); }
     }
