@@ -18,7 +18,7 @@ let _sb = null;
 })();
 
 /* Mapa de nomes de coleção → tabela Supabase */
-const _TABLE = { employees:'employees', courses:'courses', grades:'grades', visits:'visits', students:'students', financial:'financial', attendance:'attendance', audit:'audit', system_settings:'system_settings', student_auth:'student_auth', chat_messages:'chat_messages' };
+const _TABLE = { employees:'employees', courses:'courses', grades:'grades', visits:'visits', students:'students', financial:'financial', attendance:'attendance', audit:'audit', system_settings:'system_settings', student_auth:'student_auth', chat_messages:'chat_messages', schedule:'schedule' };
 
 const DB = {
   prefix: 'ep_',
@@ -124,8 +124,11 @@ const DB = {
 
   /* ── Seed inicial ── */
   seed() {
-    /* Se ainda não tem as novas coleções, reseta para re-seedar */
+    /* Reseta seed se faltar coleções novas */
     if (localStorage.getItem('ep_seeded') && !localStorage.getItem('ep_student_auth')) {
+      localStorage.removeItem('ep_seeded');
+    }
+    if (localStorage.getItem('ep_seeded') && !localStorage.getItem('ep_schedule')) {
       localStorage.removeItem('ep_seeded');
     }
     if (localStorage.getItem('ep_seeded')) return;
@@ -278,6 +281,21 @@ const DB = {
 
     /* MENSAGENS DE CHAT */
     this.set('chat_messages', []);
+
+    /* GRADE DE HORÁRIO — exemplos iniciais */
+    const scheduleExamples = [
+      { id:'sch1', dia:'seg', horario:'08:00-09:30', maquina:'COMPUTADOR 01', alunoId:'alu_joao',     visitaId:null, nomeAluno:'João Carlos Silva',       tipo:'aluno'  },
+      { id:'sch2', dia:'seg', horario:'08:00-09:30', maquina:'COMPUTADOR 02', alunoId:'alu_fernanda', visitaId:null, nomeAluno:'Fernanda Lima Santos',     tipo:'aluno'  },
+      { id:'sch3', dia:'seg', horario:'09:30-11:00', maquina:'COMPUTADOR 01', alunoId:'alu_pedro',    visitaId:null, nomeAluno:'Pedro Oliveira Santana',   tipo:'aluno'  },
+      { id:'sch4', dia:'seg', horario:'13:00-14:30', maquina:'COMPUTADOR 03', alunoId:'alu_maria',    visitaId:null, nomeAluno:'Maria Eduarda Oliveira',   tipo:'aluno'  },
+      { id:'sch5', dia:'ter', horario:'08:00-09:30', maquina:'COMPUTADOR 01', alunoId:'alu_joao',     visitaId:null, nomeAluno:'João Carlos Silva',       tipo:'aluno'  },
+      { id:'sch6', dia:'ter', horario:'08:00-09:30', maquina:'COMPUTADOR 02', alunoId:'alu_fernanda', visitaId:null, nomeAluno:'Fernanda Lima Santos',     tipo:'aluno'  },
+      { id:'sch7', dia:'ter', horario:'11:00-12:30', maquina:'COMPUTADOR 05', alunoId:null, visitaId:'vis_marcos',  nomeAluno:'Marcos Vieira',            tipo:'visita' },
+      { id:'sch8', dia:'qua', horario:'09:30-11:00', maquina:'COMPUTADOR 02', alunoId:'alu_pedro',    visitaId:null, nomeAluno:'Pedro Oliveira Santana',   tipo:'aluno'  },
+      { id:'sch9', dia:'qui', horario:'14:30-16:00', maquina:'COMPUTADOR 04', alunoId:'alu_roberto',  visitaId:null, nomeAluno:'Roberto Alves Nascimento', tipo:'aluno'  },
+    ];
+    scheduleExamples.forEach(s => { s.createdAt = new Date().toISOString(); s.updatedAt = new Date().toISOString(); });
+    this.set('schedule', scheduleExamples);
 
     /* AUDITORIA */
     this.set('audit', [

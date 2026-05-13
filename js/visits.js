@@ -9,6 +9,19 @@ const VisitsModule = (() => {
     muito_quente: { label:'🚀 Muito Quente',     short:'🚀 M. Quente',  cls:'bg-red-900/50 text-red-300 border-red-700/40' },
   };
 
+  const ORIGENS = [
+    { key: '',           label: '— Não informado' },
+    { key: 'instagram',  label: '📸 Instagram' },
+    { key: 'facebook',   label: '👍 Facebook / Meta Ads' },
+    { key: 'whatsapp',   label: '📱 WhatsApp' },
+    { key: 'indicacao',  label: '🤝 Indicação' },
+    { key: 'olx',        label: '📌 OLX' },
+    { key: 'plantao',    label: '🏢 Plantão de Vendas' },
+    { key: 'google',     label: '🔍 Google' },
+    { key: 'site',       label: '🌐 Site' },
+    { key: 'outro',      label: '💬 Outro' },
+  ];
+
   let _filters = { q:'', temp:'', de:'', ate:'' };
 
   /* ── helpers ── */
@@ -117,6 +130,12 @@ const VisitsModule = (() => {
       </div>`;
   }
 
+  function _origemBadge(key) {
+    const o = ORIGENS.find(x => x.key === (key||'')) || ORIGENS[0];
+    if (!key) return '<span class="text-gray-600 text-xs">—</span>';
+    return `<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-gray-700/60 border border-gray-600/40 text-gray-300">${o.label}</span>`;
+  }
+
   function renderList(visits) {
     if (!visits.length) return Utils.emptyState('Nenhum lead encontrado com os filtros aplicados');
     return `
@@ -124,21 +143,24 @@ const VisitsModule = (() => {
         <thead><tr class="table-header">
           <th>Nome</th>
           <th class="hidden sm:table-cell">Temperatura</th>
-          <th class="hidden md:table-cell">Telefone</th>
-          <th class="hidden lg:table-cell">Cadastro</th>
+          <th class="hidden md:table-cell">Origem</th>
+          <th class="hidden lg:table-cell">Atendente</th>
           <th class="hidden lg:table-cell text-center">Obs.</th>
           <th class="text-right pr-4">Ações</th>
         </tr></thead>
         <tbody>
-          ${visits.map(v => `
+          ${visits.map(v => {
+            const atendente = v.vendedorId ? DB.findById('employees', v.vendedorId) : null;
+            return `
           <tr class="table-row">
             <td>
               <div class="font-medium text-white">${v.nome}</div>
               <div class="text-xs text-gray-400">${Utils.calcAge(v.dataNascimento)} anos · ${v.sexo==='M'?'Masculino':'Feminino'}</div>
+              <div class="sm:hidden mt-0.5">${_tempBadge(v.temperatura)}</div>
             </td>
             <td class="hidden sm:table-cell">${_tempBadge(v.temperatura)}</td>
-            <td class="hidden md:table-cell text-gray-300">${Utils.formatPhone(v.telefone)}</td>
-            <td class="hidden lg:table-cell text-gray-500 text-sm">${Utils.formatDate(v.createdAt)}</td>
+            <td class="hidden md:table-cell">${_origemBadge(v.origem)}</td>
+            <td class="hidden lg:table-cell text-gray-400 text-sm">${atendente?.nome || '—'}</td>
             <td class="hidden lg:table-cell text-center">
               ${(v.observacoes||[]).length
                 ? `<span class="inline-flex items-center justify-center w-5 h-5 rounded-full bg-primary-800 text-primary-200 text-xs font-bold">${(v.observacoes||[]).length}</span>`
@@ -152,7 +174,8 @@ const VisitsModule = (() => {
                 ${Auth.can('visitas','excluir') ? `<button onclick="VisitsModule.remove('${v.id}')" class="btn-danger btn-sm">🗑️</button>` : ''}
               </div>
             </td>
-          </tr>`).join('')}
+          </tr>`;
+          }).join('')}
         </tbody>
       </table>`;
   }
@@ -184,6 +207,9 @@ const VisitsModule = (() => {
         ${lbl}
       </button>`;
 
+    const atendente = v.vendedorId ? DB.findById('employees', v.vendedorId) : null;
+    const origemLabel = ORIGENS.find(x => x.key === (v.origem||''))?.label || '—';
+
     Utils.showModal(`
       <div class="p-6">
         <div class="flex items-center justify-between mb-5">
@@ -192,6 +218,25 @@ const VisitsModule = (() => {
             <p class="text-gray-400 text-sm">${Utils.formatPhone(v.telefone)}${v.email ? ' · '+v.email : ''} · Cadastro: ${Utils.formatDate(v.createdAt)}</p>
           </div>
           <button onclick="Utils.closeModal()" class="text-gray-400 hover:text-white text-lg">✕</button>
+        </div>
+
+        <!-- Origem & Atendimento -->
+        <div class="mb-5">
+          <p class="section-title mb-2">📋 Origem & Atendimento</p>
+          <div class="card card-sm grid grid-cols-1 sm:grid-cols-3 gap-3 text-sm">
+            <div class="text-center">
+              <p class="text-gray-500 text-xs mb-1">Origem do Lead</p>
+              <p class="text-white font-medium">${origemLabel}</p>
+            </div>
+            <div class="text-center">
+              <p class="text-gray-500 text-xs mb-1">Atendente / Vendedor</p>
+              <p class="text-white font-medium">${atendente?.nome || '—'}</p>
+            </div>
+            <div class="text-center">
+              <p class="text-gray-500 text-xs mb-1">Gerador / Captador</p>
+              <p class="text-white font-medium">${v.geradorNome || '—'}</p>
+            </div>
+          </div>
         </div>
 
         <!-- Temperatura -->
@@ -203,6 +248,17 @@ const VisitsModule = (() => {
             ${tempBtn('morno','🌡️ Morno')}
             ${tempBtn('quente','🔥 Quente')}
             ${tempBtn('muito_quente','🚀 Muito Quente')}
+          </div>
+        </div>
+
+        <!-- Horários Disponíveis -->
+        <div class="mb-5">
+          <button onclick="VisitsModule.toggleHorarios()" class="section-title mb-0 flex items-center gap-2 w-full text-left hover:text-white transition-colors">
+            <span>🗓️ Horários Disponíveis na Semana</span>
+            <span id="horariosToggleIcon" class="text-gray-500 text-xs ml-auto">▼ ver</span>
+          </button>
+          <div id="horariosDisp" class="hidden mt-3 card card-sm bg-gray-800/40">
+            ${typeof ScheduleModule !== 'undefined' ? ScheduleModule.renderMiniDisponivel() : '<p class="text-gray-500 text-xs">Módulo de agenda não carregado.</p>'}
           </div>
         </div>
 
@@ -236,6 +292,14 @@ const VisitsModule = (() => {
       </div>`);
 
     setTimeout(() => { const el = document.getElementById('obsInput'); if (el) el.focus(); }, 80);
+  }
+
+  function toggleHorarios() {
+    const el   = document.getElementById('horariosDisp');
+    const icon = document.getElementById('horariosToggleIcon');
+    if (!el) return;
+    const hidden = el.classList.toggle('hidden');
+    if (icon) icon.textContent = hidden ? '▼ ver' : '▲ ocultar';
   }
 
   function setTemperatura(id, temp) {
@@ -349,8 +413,10 @@ const VisitsModule = (() => {
 
   /* ── formulário ── */
   function openForm(id = null) {
-    const v      = id ? DB.findById('visits', id) : null;
-    const isEdit = !!v;
+    const v        = id ? DB.findById('visits', id) : null;
+    const isEdit   = !!v;
+    const employees = DB.get('employees').filter(e => e.ativo !== false);
+
     Utils.showModal(`
       <div class="p-6">
         <div class="flex items-center justify-between mb-5">
@@ -367,6 +433,43 @@ const VisitsModule = (() => {
                 `<option value="${k}" ${(v?.temperatura||'') === k ? 'selected' : ''}>${cfg.label}</option>`
               ).join('')}
             </select>
+          </div>
+
+          <!-- Origem & Atendimento -->
+          <div>
+            <p class="section-title">📋 Origem & Atendimento</p>
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label class="form-label">Origem do Lead</label>
+                <select name="origem" class="input-field">
+                  ${ORIGENS.map(o => `<option value="${o.key}" ${(v?.origem||'') === o.key ? 'selected' : ''}>${o.label}</option>`).join('')}
+                </select>
+              </div>
+              <div>
+                <label class="form-label">Atendente / Vendedor</label>
+                <select name="vendedorId" class="input-field">
+                  <option value="">— Selecione —</option>
+                  ${employees.map(e => `<option value="${e.id}" ${v?.vendedorId === e.id ? 'selected' : ''}>${e.nome}</option>`).join('')}
+                </select>
+              </div>
+              <div class="sm:col-span-2">
+                <label class="form-label">Gerador / Captador do Lead</label>
+                <input name="geradorNome" class="input-field" placeholder="Nome de quem captou este lead"
+                  value="${v?.geradorNome || ''}">
+              </div>
+            </div>
+          </div>
+
+          <!-- Horários Disponíveis -->
+          <div class="bg-gray-800/40 border border-gray-700/30 rounded-xl p-4">
+            <button type="button" onclick="VisitsModule.toggleHorarios()"
+              class="flex items-center justify-between w-full text-sm font-semibold text-gray-300 hover:text-white transition-colors">
+              <span>🗓️ Ver Horários Disponíveis na Semana</span>
+              <span id="horariosToggleIcon" class="text-gray-500 text-xs">▼ ver</span>
+            </button>
+            <div id="horariosDisp" class="hidden mt-3">
+              ${typeof ScheduleModule !== 'undefined' ? ScheduleModule.renderMiniDisponivel() : '<p class="text-gray-500 text-xs">Carregando…</p>'}
+            </div>
           </div>
 
           <div>
@@ -522,6 +625,9 @@ const VisitsModule = (() => {
       cep:d.cep, endereco:d.endereco, numero:d.numero, bairro:d.bairro, cidade:d.cidade, estado:d.estado,
       telefone:d.telefone, email:d.email, responsavel,
       temperatura:  d.temperatura || null,
+      origem:       d.origem       || null,
+      vendedorId:   d.vendedorId   || null,
+      geradorNome:  d.geradorNome  || null,
       observacoes:  old?.observacoes || [],
       status:       'visita',
       criadoPor:    id ? old?.criadoPor : Auth.currentUser?.id,
@@ -622,6 +728,7 @@ const VisitsModule = (() => {
   return {
     render, openForm, save, remove, convertToStudent, confirmCreateLogin,
     search, onBirthChange, toggleResp, buscarCEP,
-    setFilter, clearFilters, openDetail, setTemperatura, addObservacao, removeObservacao, exportWord
+    setFilter, clearFilters, openDetail, setTemperatura, addObservacao, removeObservacao, exportWord,
+    toggleHorarios
   };
 })();
