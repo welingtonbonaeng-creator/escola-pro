@@ -260,6 +260,7 @@ const StudentsModule = (() => {
   function setRestanteValor(i, v) { if ((_mat.restante||[])[i]) { _mat.restante[i].valor = _parseBRL(v); _refresh('restante'); } }
   function formatRestanteValor(i, el) { const val = (_mat.restante||[])[i]?.valor||0; if(val>0) el.value=val.toFixed(2).replace('.',','); }
   function setRestanteParcelas(i, v) { if ((_mat.restante||[])[i]) _mat.restante[i].parcelas = parseInt(v)||1; }
+  function setDataVenc(v) { _mat.dataVenc = v; }
 
   function setCursoValor(i, v) { _mat.cursos[i].valor = _parseBRL(v); _refresh('cursos'); }
   function formatCursoValor(i, el) { const val = _mat.cursos[i]?.valor||0; if(val>0) el.value=val.toFixed(2).replace('.',','); }
@@ -695,6 +696,7 @@ const StudentsModule = (() => {
       extraDesc: mat?.desconto   || 0,
       entrada:   mat?.entrada    || [],
       restante:  mat?.restante   || [],
+      dataVenc:  mat?.dataVencRestante || '',
       slots: id
         ? DB.get('schedule').filter(s=>s.alunoId===id).map(s=>({dia:s.dia,horario:s.horario}))
         : (preSlot ? [{ dia: preSlot.dia, horario: preSlot.horario }] : []),
@@ -861,6 +863,17 @@ const StudentsModule = (() => {
                   <option value="boleto">Boleto</option>
                 </select>
               </div>
+
+              <!-- Data do 1º vencimento das parcelas -->
+              <div class="flex items-center gap-3 mb-3 bg-blue-900/20 border border-blue-700/20 rounded-lg px-3 py-2">
+                <span class="text-xs text-blue-300 font-medium whitespace-nowrap">📆 1º Vencimento</span>
+                <input type="date" class="input-field text-xs py-1 flex-1"
+                  value="${_mat.dataVenc||''}"
+                  onchange="StudentsModule.setDataVenc(this.value)"
+                  placeholder="dd/mm/aaaa">
+                <span class="text-xs text-gray-500 whitespace-nowrap">parcelas mensais</span>
+              </div>
+
               <div id="matRestanteList"></div>
             </div>
           </div>
@@ -909,7 +922,8 @@ const StudentsModule = (() => {
       totalParcelas: c.nP,
       valorParcela:  parseFloat((c.valorParcela||0).toFixed(2)),
       valorTotal:  c.totalCursos,
-      restante:    _mat.restante,
+      restante:          _mat.restante,
+      dataVencRestante:  _mat.dataVenc || d.dataInicio,
       formasPagamento: [
         ..._mat.entrada.map(en => ({ tipo: en.tipo, valor: en.valor, parcelas: en.parcelas||1 })),
         ...(_mat.restante||[]).map(re => ({ tipo: re.tipo, valor: re.valor, parcelas: re.parcelas||1 }))
@@ -979,7 +993,7 @@ const StudentsModule = (() => {
       });
 
       /* Valor restante — múltiplas formas, cada uma com parcelamento independente */
-      const inicio = new Date(d.dataInicio);
+      const inicio = new Date(_mat.dataVenc || d.dataInicio);
       (_mat.restante||[]).forEach(re => {
         const valorTotal = _parseBRL(re.valor);
         if (valorTotal <= 0) return;
@@ -1040,7 +1054,7 @@ const StudentsModule = (() => {
     addCurso, removeCurso, setComboDesc, setExtraDesc, setCursoValor, formatCursoValor,
     addEntrada, removeEntrada, setEntradaValor, formatEntradaValor, setEntradaParcelas,
     addRestante, removeRestante, setRestanteValor, formatRestanteValor, setRestanteParcelas,
-    toggleSlot,
+    setDataVenc, toggleSlot,
     darBaixaEntrada, _calcSaldoBaixa, confirmarBaixa
   };
 })();
