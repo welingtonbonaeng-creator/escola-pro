@@ -33,8 +33,28 @@ const StudentPortal = {
     const curso = mat ? DB.findById('courses', mat.cursoId) : null;
     const turma = mat ? DB.findById('grades',  mat.turmaId) : null;
 
-    const diasMap = { seg:'Segunda', ter:'Terça', qua:'Quarta', qui:'Quinta', sex:'Sexta', sab:'Sábado', dom:'Domingo' };
-    const dias = (turma?.diasSemana || []).map(d => diasMap[d] || d).join(', ');
+    const diasMap  = { seg:'Segunda', ter:'Terça', qua:'Quarta', qui:'Quinta', sex:'Sexta', sab:'Sábado', dom:'Domingo' };
+    const ORDEM    = ['seg','ter','qua','qui','sex','sab','dom'];
+
+    /* Fonte verdadeira: slots individuais gravados na grade de horários */
+    const slots = DB.get('schedule').filter(sl => sl.alunoId === s.id);
+
+    /* Agrupa por horário → lista os dias de cada horário em ordem */
+    let diasHorario = '—';
+    if (slots.length > 0) {
+      const grupos = {};
+      slots.forEach(sl => { (grupos[sl.horario] = grupos[sl.horario]||[]).push(sl.dia); });
+      diasHorario = Object.entries(grupos)
+        .sort(([a],[b]) => a.localeCompare(b))
+        .map(([hor, ds]) => {
+          const sorted = [...ds].sort((a,b) => ORDEM.indexOf(a) - ORDEM.indexOf(b));
+          return sorted.map(d => diasMap[d]||d).join(', ') + ' · ' + hor;
+        }).join('<br>');
+    } else if (turma) {
+      /* Fallback para alunos sem slots (legado) */
+      const ds = (turma.diasSemana||[]).map(d => diasMap[d]||d).join(', ');
+      diasHorario = ds + (turma.horarioInicio ? ' · ' + turma.horarioInicio + '–' + turma.horarioFim : '');
+    }
 
     const freq      = DB.findBy('attendance','alunoId',s.id);
     const presencas = freq.filter(f=>f.presente).length;
@@ -51,8 +71,7 @@ const StudentPortal = {
         <div class="space-y-2.5">
           <div class="flex justify-between text-sm"><span class="text-gray-400">Curso</span><span class="text-white font-semibold">${curso?.nome||'—'}</span></div>
           <div class="flex justify-between text-sm"><span class="text-gray-400">Turma</span><span class="text-white">${turma?.nome||'—'}</span></div>
-          <div class="flex justify-between text-sm"><span class="text-gray-400">Dias</span><span class="text-white">${dias||'—'}</span></div>
-          <div class="flex justify-between text-sm"><span class="text-gray-400">Horário</span><span class="text-white">${turma?.horarioInicio||'—'} – ${turma?.horarioFim||'—'}</span></div>
+          <div class="flex justify-between text-sm"><span class="text-gray-400">Dias & Horários</span><span class="text-white text-right" style="max-width:60%">${diasHorario}</span></div>
           <div class="flex justify-between text-sm"><span class="text-gray-400">Início</span><span class="text-white">${Utils.formatDate(mat.dataInicio)}</span></div>
         </div>
       </div>` : `<div class="card text-center py-6"><p class="text-gray-400">Nenhuma matrícula ativa</p></div>`}
