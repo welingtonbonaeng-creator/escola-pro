@@ -366,7 +366,8 @@ const StaffChatModule = (() => {
 
   function totalUnread() {
     if (!Auth.logged) return 0;
-    return DB.get('internal_messages').filter(m=>m.toId===Auth.currentUser.id&&!m.readAt).length;
+    /* Exclui mensagens automáticas do sistema (fromId='system') — essas ficam no painel de Notificações */
+    return DB.get('internal_messages').filter(m=>m.toId===Auth.currentUser.id&&!m.readAt&&m.fromId!=='system').length;
   }
 
   return { render, renderManagerView, renderEmployeeView, select, backToList, sendTxt, sendFile, startRec, stopRec, cancelRec, toggleMenu, viewImg, totalUnread };
