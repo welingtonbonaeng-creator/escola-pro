@@ -190,12 +190,26 @@ const NotificationSystem = {
     this._checkAbsences();
   },
 
+  /* ── Toggle de expand/collapse das faltas por aluno ── */
+  toggleAbsRow(id) {
+    const el  = document.getElementById(id);
+    const btn = document.getElementById(id + '_btn');
+    if (!el) return;
+    const hidden = el.classList.toggle('hidden');
+    if (btn) btn.textContent = hidden ? '▼ Ver datas' : '▲ Fechar';
+  },
+
   /* ── Painel de configurações (admin) ── */
   renderSettings() {
     const { delinquencies, absencePending } = this._getActiveAlerts();
     const dEntries  = Object.entries(delinquencies);
     const employees = DB.get('employees').filter(e => e.id !== 'emp_master' && e.ativo !== false);
     const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+    /* Agrupa faltas por aluno */
+    const absByStudent = {};
+    absencePending.forEach(f => { (absByStudent[f.alunoId] = absByStudent[f.alunoId] || []).push(f); });
+    const absStudents = Object.entries(absByStudent);
 
     const tpls = [
       { key:'boas_vindas',         label:'🎉 Boas-vindas — mensagem principal',       desc:'Variáveis: {nome}' },
@@ -217,7 +231,7 @@ const NotificationSystem = {
       <div class="space-y-3">
         <p class="section-title">Alertas ativos</p>
 
-        ${dEntries.length === 0 && absencePending.length === 0 ? `
+        ${dEntries.length === 0 && absStudents.length === 0 ? `
         <div class="card text-center py-6">
           <div class="text-3xl mb-2">✅</div>
           <p class="text-green-400 font-semibold">Nenhum alerta ativo</p>
@@ -238,16 +252,40 @@ const NotificationSystem = {
           </div>
         </div>` : ''}
 
-        ${absencePending.length > 0 ? `
+        ${absStudents.length > 0 ? `
         <div class="card bg-yellow-900/20 border border-yellow-700/40">
-          <p class="text-yellow-300 font-semibold mb-3">📋 ${absencePending.length} falta(s) sem reposição</p>
+          <p class="text-yellow-300 font-semibold mb-3">
+            📋 ${absStudents.length} aluno(s) · ${absencePending.length} falta(s) sem reposição
+          </p>
           <div class="space-y-0">
-            ${absencePending.map(f => {
-              const s = DB.findById('students', f.alunoId);
-              return s ? `<div class="flex justify-between text-sm py-1.5 border-b border-yellow-900/30 last:border-0">
-                <span class="text-gray-200">${s.nome}</span>
-                <span class="text-yellow-400">${Utils.formatDate(f.data)}</span>
-              </div>` : '';
+            ${absStudents.map(([alunoId, faltas], idx) => {
+              const s = DB.findById('students', alunoId);
+              if (!s) return '';
+              const sorted = [...faltas].sort((a, b) => new Date(b.data) - new Date(a.data));
+              const domId  = 'abs_row_' + idx;
+              return `
+              <div class="border-b border-yellow-900/30 last:border-0">
+                <div class="flex items-center justify-between py-2.5">
+                  <div class="flex items-center gap-2 min-w-0">
+                    <span class="text-gray-200 text-sm truncate">${s.nome}</span>
+                    <span class="flex-shrink-0 text-xs bg-yellow-800/60 text-yellow-300 px-1.5 py-0.5 rounded-full">
+                      ${faltas.length} falta${faltas.length > 1 ? 's' : ''}
+                    </span>
+                  </div>
+                  <button id="${domId}_btn"
+                    onclick="NotificationSystem.toggleAbsRow('${domId}')"
+                    class="flex-shrink-0 ml-3 text-yellow-400 hover:text-yellow-200 text-xs transition-colors">
+                    ▼ Ver datas
+                  </button>
+                </div>
+                <div id="${domId}" class="hidden pb-2 pl-2 space-y-0">
+                  ${sorted.map(f => `
+                  <div class="flex justify-between text-xs py-1.5 border-b border-yellow-900/20 last:border-0">
+                    <span class="text-gray-400">📅 ${Utils.formatDate(f.data)}</span>
+                    <span class="text-yellow-600">Sem reposição</span>
+                  </div>`).join('')}
+                </div>
+              </div>`;
             }).join('')}
           </div>
         </div>` : ''}
