@@ -3,6 +3,7 @@ const App = {
   currentModule: 'dashboard',
   _sidebarCollapsed: false,
   _badgeInterval: null,
+  _notifInterval: null,
 
   init() {
     Auth.init();
@@ -226,8 +227,9 @@ const App = {
 
     document.querySelectorAll('.nav-item').forEach(item => {
       const mod = item.dataset.module;
-      if (mod === 'myperformance') { item.style.display = Auth.isEmployee ? '' : 'none'; return; }
-      if (mod === 'staffchat')     { item.style.display = Auth.isEmployee ? '' : 'none'; return; }
+      if (mod === 'myperformance')  { item.style.display = Auth.isEmployee ? '' : 'none'; return; }
+      if (mod === 'staffchat')      { item.style.display = Auth.isEmployee ? '' : 'none'; return; }
+      if (mod === 'notifications')  { item.style.display = (Auth.isAdmin || Auth.isMaster) ? '' : 'none'; return; }
       item.style.display = (mod && !Auth.can(this._permKey(mod),'ver')) ? 'none' : '';
     });
 
@@ -237,6 +239,13 @@ const App = {
     /* Inicia polling de badges a cada 5 s */
     if (this._badgeInterval) clearInterval(this._badgeInterval);
     this._badgeInterval = setInterval(() => this.updateBadges(), 5000);
+
+    /* Verifica notificações automáticas agora e a cada hora */
+    if (typeof NotificationSystem !== 'undefined') {
+      NotificationSystem.checkAll();
+      if (this._notifInterval) clearInterval(this._notifInterval);
+      this._notifInterval = setInterval(() => NotificationSystem.checkAll(), 3600000);
+    }
 
     this.navigate(first);
   },
@@ -266,10 +275,10 @@ const App = {
   },
 
   navigate(module) {
-    if (module === 'myperformance' || module === 'staffchat') {
-      /* staffchat: funcionários acessam direto; admins acessam via botão no chat */
+    if (module === 'myperformance' || module === 'staffchat' || module === 'notifications') {
       if (module === 'staffchat' && Auth.isEmployee && !Auth.logged) { this.denied(); return; }
       if (module === 'myperformance' && !Auth.isEmployee) { this.denied(); return; }
+      if (module === 'notifications' && !Auth.isAdmin && !Auth.isMaster) { this.denied(); return; }
     } else {
       const _checkMod = this._permKey(module);
       if (!Auth.can(_checkMod,'ver')) { this.denied(); return; }
@@ -281,7 +290,7 @@ const App = {
       el.classList.toggle('active', el.dataset.module === module);
     });
 
-    const titles = { dashboard:'Dashboard', visits:'Visitas', courses:'Cursos', students:'Alunos', employees:'Funcionários', schedule:'Grade de Horário', attendance:'Frequência', financial:'Financeiro', chat:'Chat com Alunos', performance:'Desempenho', myperformance:'Meu Desempenho', staffchat:'Chat com Equipe' };
+    const titles = { dashboard:'Dashboard', visits:'Visitas', courses:'Cursos', students:'Alunos', employees:'Funcionários', schedule:'Grade de Horário', attendance:'Frequência', financial:'Financeiro', chat:'Chat com Alunos', performance:'Desempenho', myperformance:'Meu Desempenho', staffchat:'Chat com Equipe', notifications:'Notificações Automáticas' };
     document.getElementById('pageTitle').textContent = titles[module] || module;
 
     const map = {
@@ -295,8 +304,9 @@ const App = {
       financial:     () => FinancialModule.render(),
       chat:          () => ChatModule.render(),
       performance:   () => PerformanceModule.render(),
-      myperformance: () => MyPerformanceModule.render(),
-      staffchat:     () => StaffChatModule.render(),
+      myperformance:  () => MyPerformanceModule.render(),
+      staffchat:      () => StaffChatModule.render(),
+      notifications:  () => NotificationSystem.renderSettings(),
     };
     if (map[module]) map[module]();
     /* Atualiza badges imediatamente após cada navegação */
@@ -314,6 +324,7 @@ const App = {
 
   logout() {
     if (this._badgeInterval) { clearInterval(this._badgeInterval); this._badgeInterval = null; }
+    if (this._notifInterval) { clearInterval(this._notifInterval); this._notifInterval = null; }
     Auth.logout();
     document.getElementById('appScreen').classList.add('hidden');
     document.getElementById('sidebar').style.display = '';

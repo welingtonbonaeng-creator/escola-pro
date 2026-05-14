@@ -53,6 +53,10 @@ const Auth = {
     if (student.status === 'inativo') return { ok: false, msg: 'Matrícula inativa. Fale com a secretaria.' };
     this.currentStudent = student;
     sessionStorage.setItem('ep_student_session', JSON.stringify(student));
+    /* Dispara boas-vindas no primeiro login */
+    if (typeof NotificationSystem !== 'undefined') {
+      setTimeout(() => NotificationSystem.checkWelcome(student), 300);
+    }
     return { ok: true };
   },
 
